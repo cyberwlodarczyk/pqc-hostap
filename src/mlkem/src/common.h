@@ -14,7 +14,7 @@
 #if defined(MLK_CONFIG_FILE)
 #include MLK_CONFIG_FILE
 #else
-#include "mlkem/mlkem_config.h"
+#include "../mlkem_config.h"
 #endif
 
 #include "params.h"
@@ -55,7 +55,7 @@
 /* Functions are prefixed by MLK_CONFIG_NAMESPACE_PREFIX.
  *
  * If multiple parameter sets are used, functions depending on the parameter
- * set are additionally prefixed with 512/768/1024. See mlkem_config.h.
+ * set are additionally prefixed with 512/768/1024. See config.h.
  *
  * Example: If MLK_CONFIG_NAMESPACE_PREFIX is mlkem, then
  * MLK_NAMESPACE_K(enc) becomes mlkem512_enc/mlkem768_enc/mlkem1024_enc.
@@ -183,6 +183,8 @@
 /* An rng failure occured. Might be due to insufficient entropy or
  * system misconfiguration. */
 #define MLK_ERR_RNG_FAIL -3
+
+#define MLK_ERR_DIGEST_FAIL -4
 
 #endif /* !__ASSEMBLER__ */
 

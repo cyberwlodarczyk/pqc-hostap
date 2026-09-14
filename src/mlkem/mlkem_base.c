@@ -18,7 +18,7 @@
  *
  * # API
  *
- * The API exposed by this file is described in mlkem_base.h.
+ * The API exposed by this file is described in base.h.
  *
  * # Multi-level build
  *
@@ -53,7 +53,7 @@
  *
  * Example:
  * ```bash
- * unifdef -UMLK_CONFIG_USE_NATIVE_BACKEND_ARITH mlkem_base.c
+ * unifdef -UMLK_CONFIG_USE_NATIVE_BACKEND_ARITH base.c
  * ```
  */
 
@@ -119,7 +119,7 @@
 /*
  * Undefine macros from MLK_CONFIG_PARAMETER_SET-specific files
  */
-/* mlkem/mlkem_base.h */
+/* mlkem/base.h */
 #undef CRYPTO_BYTES
 #undef CRYPTO_LEN_CIPHERTEXT
 #undef CRYPTO_LEN_PUBLIC_KEY
@@ -164,6 +164,7 @@
 #undef MLK_CONFIG_API_QUALIFIER
 #undef MLK_ERR_FAIL
 #undef MLK_ERR_RNG_FAIL
+#undef MLK_ERR_DIGEST_FAIL
 #undef MLK_H
 #undef MLK_MAX3_
 #undef MLK_TOTAL_ALLOC_1024
@@ -203,6 +204,7 @@
 #undef MLK_EMPTY_CU
 #undef MLK_ERR_FAIL
 #undef MLK_ERR_RNG_FAIL
+#undef MLK_ERR_DIGEST_FAIL
 #undef MLK_EXTERNAL_API
 #undef MLK_FIPS202X4_HEADER_FILE
 #undef MLK_FIPS202_HEADER_FILE
@@ -217,6 +219,9 @@
 #undef mlk_memset
 /* mlkem/src/indcpa.h */
 #undef MLK_INDCPA_H
+#undef mlk_polyvec_permute_bitrev_to_custom
+#undef mlk_polymat_permute_bitrev_to_custom
+#undef mlk_gen_vector
 #undef mlk_gen_matrix
 #undef mlk_indcpa_dec
 #undef mlk_indcpa_enc
@@ -227,7 +232,9 @@
 #undef mlk_kem_check_sk
 #undef mlk_kem_dec
 #undef mlk_kem_enc
+#undef mlk_kem_enc_valid_pk
 #undef mlk_kem_enc_derand
+#undef mlk_kem_enc_derand_valid_pk
 #undef mlk_kem_keypair
 #undef mlk_kem_keypair_derand
 /* mlkem/src/params.h */
@@ -261,19 +268,11 @@
 #undef TEMPO_3LAMBDA
 #undef TEMPO_LEN_TAG
 #undef TEMPO_LEN_APK
-#undef TEMPO_SSBYTES
+#undef TEMPO_LEN_MSG
 #undef TEMPO_LEN_SID
 #undef TEMPO_LEN_PWD
 #undef MLKEM_UINT12_LIMIT
 #undef MLK_PARAMS_H
-/* mlkem/src/tempo.h */
-#undef MLK_TEMPO_H
-#undef mlk_tempo_session
-#undef mlk_tempo_keygen
-#undef mlk_tempo_encaps
-#undef mlk_tempo_decaps
-#undef mlk_tempo_confirm
-#undef mlk_tempo_verify
 /* mlkem/src/poly_k.h */
 #undef MLK_POLY_K_H
 #undef mlk_poly_compress_du
@@ -288,6 +287,7 @@
 #undef mlk_polyvec
 #undef mlk_polyvec_add
 #undef mlk_polyvec_sub
+#undef mlk_polyvec_sub_mask
 #undef mlk_polyvec_basemul_acc_montgomery_cached
 #undef mlk_polyvec_compress_du
 #undef mlk_polyvec_decompress_du
@@ -299,6 +299,14 @@
 #undef mlk_polyvec_reduce
 #undef mlk_polyvec_tobytes
 #undef mlk_polyvec_tomont
+/* mlkem/src/tempo.h */
+#undef MLK_TEMPO_H
+#undef mlk_tempo_keygen
+#undef mlk_tempo_encaps
+#undef mlk_tempo_decaps
+#undef mlk_tempo_confirm
+#undef mlk_tempo_verify
+#undef mlk_tempo_finish
 
 #if !defined(MLK_CONFIG_MONOBUILD_KEEP_SHARED_HEADERS)
 /*
@@ -337,6 +345,7 @@
 #undef mlk_poly_ntt
 #undef mlk_poly_reduce
 #undef mlk_poly_sub
+#undef mlk_poly_sub_mask
 #undef mlk_poly_tomont
 /* mlkem/src/randombytes.h */
 #undef MLK_RANDOMBYTES_H
@@ -395,6 +404,7 @@
 #undef MLK_SYS_WINDOWS
 #undef MLK_SYS_X86_64
 #undef MLK_SYS_X86_64_AVX2
+#undef MLK_SYS_X86_64_AVX512
 /* mlkem/src/verify.h */
 #undef MLK_USE_ASM_VALUE_BARRIER
 #undef MLK_VERIFY_H

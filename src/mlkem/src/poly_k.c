@@ -82,14 +82,13 @@ void mlk_polyvec_tobytes(uint8_t r[MLKEM_POLYVECBYTES], const mlk_polyvec *a)
   mlk_assert_bound_2d(a->vec, MLKEM_K, MLKEM_N, 0, MLKEM_Q);
 
   for (i = 0; i < MLKEM_K; i++)
-  __loop__(
-    assigns(i, memory_slice(r, MLKEM_POLYVECBYTES))
-    invariant(i <= MLKEM_K)
-    decreases(MLKEM_K - i)
-  )
-  {
-    mlk_poly_tobytes(&r[i * MLKEM_POLYBYTES], &a->vec[i]);
-  }
+    __loop__(
+        assigns(i, memory_slice(r, MLKEM_POLYVECBYTES))
+            invariant(i <= MLKEM_K)
+                decreases(MLKEM_K - i))
+    {
+      mlk_poly_tobytes(&r[i * MLKEM_POLYBYTES], &a->vec[i]);
+    }
 }
 
 /* Reference: `polyvec_frombytes()` in the reference implementation @[REF]. */
@@ -149,42 +148,41 @@ void mlk_polyvec_invntt_tomont(mlk_polyvec *r)
 MLK_STATIC_TESTABLE void mlk_polyvec_basemul_acc_montgomery_cached_c(
     mlk_poly *r, const mlk_polyvec *a, const mlk_polyvec *b,
     const mlk_polyvec_mulcache *b_cache)
-__contract__(
-  requires(memory_no_alias(r, sizeof(mlk_poly)))
-  requires(memory_no_alias(a, sizeof(mlk_polyvec)))
-  requires(memory_no_alias(b, sizeof(mlk_polyvec)))
-  requires(memory_no_alias(b_cache, sizeof(mlk_polyvec_mulcache)))
-  requires(forall(k1, 0, MLKEM_K,
-     array_bound(a->vec[k1].coeffs, 0, MLKEM_N, 0, MLKEM_UINT12_LIMIT)))
-  assigns(memory_slice(r, sizeof(mlk_poly)))
-)
+    __contract__(
+        requires(memory_no_alias(r, sizeof(mlk_poly)))
+            requires(memory_no_alias(a, sizeof(mlk_polyvec)))
+                requires(memory_no_alias(b, sizeof(mlk_polyvec)))
+                    requires(memory_no_alias(b_cache, sizeof(mlk_polyvec_mulcache)))
+                        requires(forall(k1, 0, MLKEM_K,
+                                        array_bound(a->vec[k1].coeffs, 0, MLKEM_N, 0, MLKEM_UINT12_LIMIT)))
+                            assigns(memory_slice(r, sizeof(mlk_poly))))
 {
   unsigned i;
   mlk_assert_bound_2d(a->vec, MLKEM_K, MLKEM_N, 0, MLKEM_UINT12_LIMIT);
 
   for (i = 0; i < MLKEM_N / 2; i++)
-  __loop__(invariant(i <= MLKEM_N / 2)
-           decreases(MLKEM_N / 2 - i))
-  {
-    unsigned k;
-    int32_t t[2] = {0};
-    for (k = 0; k < MLKEM_K; k++)
-    __loop__(
-      invariant(k <= MLKEM_K &&
-         t[0] <=    (int32_t) k * 2 * MLKEM_UINT12_LIMIT * 32768  &&
-         t[0] >= - ((int32_t) k * 2 * MLKEM_UINT12_LIMIT * 32768) &&
-         t[1] <=   ((int32_t) k * 2 * MLKEM_UINT12_LIMIT * 32768) &&
-         t[1] >= - ((int32_t) k * 2 * MLKEM_UINT12_LIMIT * 32768))
-      decreases(MLKEM_K - k))
+    __loop__(invariant(i <= MLKEM_N / 2)
+                 decreases(MLKEM_N / 2 - i))
     {
-      t[0] += (int32_t)a->vec[k].coeffs[2 * i + 1] * b_cache->vec[k].coeffs[i];
-      t[0] += (int32_t)a->vec[k].coeffs[2 * i] * b->vec[k].coeffs[2 * i];
-      t[1] += (int32_t)a->vec[k].coeffs[2 * i] * b->vec[k].coeffs[2 * i + 1];
-      t[1] += (int32_t)a->vec[k].coeffs[2 * i + 1] * b->vec[k].coeffs[2 * i];
+      unsigned k;
+      int32_t t[2] = {0};
+      for (k = 0; k < MLKEM_K; k++)
+        __loop__(
+            invariant(k <= MLKEM_K &&
+                      t[0] <= (int32_t)k * 2 * MLKEM_UINT12_LIMIT * 32768 &&
+                      t[0] >= -((int32_t)k * 2 * MLKEM_UINT12_LIMIT * 32768) &&
+                      t[1] <= ((int32_t)k * 2 * MLKEM_UINT12_LIMIT * 32768) &&
+                      t[1] >= -((int32_t)k * 2 * MLKEM_UINT12_LIMIT * 32768))
+                decreases(MLKEM_K - k))
+        {
+          t[0] += (int32_t)a->vec[k].coeffs[2 * i + 1] * b_cache->vec[k].coeffs[i];
+          t[0] += (int32_t)a->vec[k].coeffs[2 * i] * b->vec[k].coeffs[2 * i];
+          t[1] += (int32_t)a->vec[k].coeffs[2 * i] * b->vec[k].coeffs[2 * i + 1];
+          t[1] += (int32_t)a->vec[k].coeffs[2 * i + 1] * b->vec[k].coeffs[2 * i];
+        }
+      r->coeffs[2 * i + 0] = mlk_montgomery_reduce(t[0]);
+      r->coeffs[2 * i + 1] = mlk_montgomery_reduce(t[1]);
     }
-    r->coeffs[2 * i + 0] = mlk_montgomery_reduce(t[0]);
-    r->coeffs[2 * i + 1] = mlk_montgomery_reduce(t[1]);
-  }
 }
 
 MLK_INTERNAL_API
@@ -260,46 +258,61 @@ void mlk_polyvec_add(mlk_polyvec *r, const mlk_polyvec *b)
 {
   unsigned i;
   for (i = 0; i < MLKEM_K; i++)
-  __loop__(
-    assigns(i, memory_slice(r, sizeof(mlk_polyvec)))
-    invariant(i <= MLKEM_K)
-    invariant(forall(j0, i, MLKEM_K,
-                forall(k0, 0, MLKEM_N,
-                       ((int32_t)r->vec[j0].coeffs[k0] + b->vec[j0].coeffs[k0] <= INT16_MAX) &&
-                       ((int32_t)r->vec[j0].coeffs[k0] + b->vec[j0].coeffs[k0] >= INT16_MIN))))
-    invariant(forall(j2, 0, i,
-                forall(k2, 0, MLKEM_N,
-                       (r->vec[j2].coeffs[k2] <= INT16_MAX) &&
-                       (r->vec[j2].coeffs[k2] >= INT16_MIN))))
-    decreases(MLKEM_K - i)
-  )
-  {
-    mlk_poly_add(&r->vec[i], &b->vec[i]);
-  }
+    __loop__(
+        assigns(i, memory_slice(r, sizeof(mlk_polyvec)))
+            invariant(i <= MLKEM_K)
+                invariant(forall(j0, i, MLKEM_K,
+                                 forall(k0, 0, MLKEM_N,
+                                        ((int32_t)r->vec[j0].coeffs[k0] + b->vec[j0].coeffs[k0] <= INT16_MAX) &&
+                                            ((int32_t)r->vec[j0].coeffs[k0] + b->vec[j0].coeffs[k0] >= INT16_MIN))))
+                    invariant(forall(j2, 0, i,
+                                     forall(k2, 0, MLKEM_N,
+                                            (r->vec[j2].coeffs[k2] <= INT16_MAX) &&
+                                                (r->vec[j2].coeffs[k2] >= INT16_MIN))))
+                        decreases(MLKEM_K - i))
+    {
+      mlk_poly_add(&r->vec[i], &b->vec[i]);
+    }
 }
 
+#if !defined(MLK_CONFIG_TEMPO_FLS185)
 MLK_INTERNAL_API
 void mlk_polyvec_sub(mlk_polyvec *r, const mlk_polyvec *b)
 {
   unsigned i;
   for (i = 0; i < MLKEM_K; i++)
-  __loop__(
-    assigns(i, memory_slice(r, sizeof(mlk_polyvec)))
-    invariant(i <= MLKEM_K)
-    invariant(forall(j0, i, MLKEM_K,
-                forall(k0, 0, MLKEM_N,
-                       ((int32_t)r->vec[j0].coeffs[k0] + b->vec[j0].coeffs[k0] <= INT16_MAX) &&
-                       ((int32_t)r->vec[j0].coeffs[k0] + b->vec[j0].coeffs[k0] >= INT16_MIN))))
-    invariant(forall(j2, 0, i,
-                forall(k2, 0, MLKEM_N,
-                       (r->vec[j2].coeffs[k2] <= INT16_MAX) &&
-                       (r->vec[j2].coeffs[k2] >= INT16_MIN))))
-    decreases(MLKEM_K - i)
-  )
+    __loop__(
+        assigns(i, memory_slice(r, sizeof(mlk_polyvec)))
+            invariant(i <= MLKEM_K)
+                invariant(forall(j0, i, MLKEM_K,
+                                 forall(k0, 0, MLKEM_N,
+                                        ((int32_t)r->vec[j0].coeffs[k0] + b->vec[j0].coeffs[k0] <= INT16_MAX) &&
+                                            ((int32_t)r->vec[j0].coeffs[k0] + b->vec[j0].coeffs[k0] >= INT16_MIN))))
+                    invariant(forall(j2, 0, i,
+                                     forall(k2, 0, MLKEM_N,
+                                            (r->vec[j2].coeffs[k2] <= INT16_MAX) &&
+                                                (r->vec[j2].coeffs[k2] >= INT16_MIN))))
+                        decreases(MLKEM_K - i))
+    {
+      mlk_poly_sub(&r->vec[i], &b->vec[i]);
+    }
+}
+#endif
+
+#if defined(MLK_CONFIG_TEMPO_FLS185)
+MLK_INTERNAL_API
+void mlk_polyvec_sub_mask(
+    mlk_polyvec *r,
+    const mlk_polyvec *a,
+    const mlk_polyvec *b,
+    int mask)
+{
+  for (int i = 0; i < MLKEM_K; i++)
   {
-    mlk_poly_sub(&r->vec[i], &b->vec[i]);
+    mlk_poly_sub_mask(&r->vec[i], &a->vec[i], &b->vec[i], mask);
   }
 }
+#endif
 
 /* Reference: `polyvec_tomont()` in the reference implementation @[REF]. */
 MLK_INTERNAL_API
@@ -313,7 +326,6 @@ void mlk_polyvec_tomont(mlk_polyvec *r)
 
   mlk_assert_abs_bound_2d(r->vec, MLKEM_K, MLKEM_N, MLKEM_Q);
 }
-
 
 /*************************************************
  * Name:        mlk_poly_cbd_eta1
@@ -334,12 +346,11 @@ void mlk_polyvec_tomont(mlk_polyvec *r)
 /* Reference: `poly_cbd_eta1` in the reference implementation @[REF]. */
 static MLK_INLINE void mlk_poly_cbd_eta1(
     mlk_poly *r, const uint8_t buf[MLKEM_ETA1 * MLKEM_N / 4])
-__contract__(
-  requires(memory_no_alias(r, sizeof(mlk_poly)))
-  requires(memory_no_alias(buf, MLKEM_ETA1 * MLKEM_N / 4))
-  assigns(memory_slice(r, sizeof(mlk_poly)))
-  ensures(array_abs_bound(r->coeffs, 0, MLKEM_N, MLKEM_ETA1 + 1))
-)
+    __contract__(
+        requires(memory_no_alias(r, sizeof(mlk_poly)))
+            requires(memory_no_alias(buf, MLKEM_ETA1 *MLKEM_N / 4))
+                assigns(memory_slice(r, sizeof(mlk_poly)))
+                    ensures(array_abs_bound(r->coeffs, 0, MLKEM_N, MLKEM_ETA1 + 1)))
 {
 #if MLKEM_ETA1 == 2
   mlk_poly_cbd2(r, buf);
@@ -424,11 +435,11 @@ void mlk_poly_getnoise_eta1_4x(mlk_poly *r0, mlk_poly *r1, mlk_poly *r2,
 /* Reference: `poly_cbd_eta2` in the reference implementation @[REF]. */
 static MLK_INLINE void mlk_poly_cbd_eta2(
     mlk_poly *r, const uint8_t buf[MLKEM_ETA2 * MLKEM_N / 4])
-__contract__(
-  requires(memory_no_alias(r, sizeof(mlk_poly)))
-  requires(memory_no_alias(buf, MLKEM_ETA2 * MLKEM_N / 4))
-  assigns(memory_slice(r, sizeof(mlk_poly)))
-  ensures(array_abs_bound(r->coeffs, 0, MLKEM_N, MLKEM_ETA2 + 1)))
+    __contract__(
+        requires(memory_no_alias(r, sizeof(mlk_poly)))
+            requires(memory_no_alias(buf, MLKEM_ETA2 *MLKEM_N / 4))
+                assigns(memory_slice(r, sizeof(mlk_poly)))
+                    ensures(array_abs_bound(r->coeffs, 0, MLKEM_N, MLKEM_ETA2 + 1)))
 {
 #if MLKEM_ETA2 == 2
   mlk_poly_cbd2(r, buf);

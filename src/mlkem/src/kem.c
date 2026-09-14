@@ -231,25 +231,16 @@ cleanup:
 }
 #endif /* !MLK_CONFIG_NO_RANDOMIZED_API */
 
-/* Reference: `crypto_kem_enc_derand()` in the reference implementation @[REF]
- *            - We include public key check
- *            - We include stack buffer zeroization */
-MLK_EXTERNAL_API
-int mlk_kem_enc_derand(uint8_t ct[MLKEM_INDCCA_LEN_CIPHERTEXT],
-                       uint8_t ss[MLKEM_SSBYTES],
-                       const uint8_t pk[MLKEM_INDCCA_LEN_PUBLIC_KEY],
-                       const uint8_t coins[MLKEM_SYMBYTES])
+MLK_INTERNAL_API
+int mlk_kem_enc_derand_valid_pk(
+    uint8_t ct[MLKEM_INDCCA_LEN_CIPHERTEXT],
+    uint8_t ss[MLKEM_SSBYTES],
+    const uint8_t pk[MLKEM_INDCCA_LEN_PUBLIC_KEY],
+    const uint8_t coins[MLKEM_SYMBYTES])
 {
   int ret = 0;
   uint8_t buf[2 * MLKEM_SYMBYTES];
   uint8_t kr[2 * MLKEM_SYMBYTES];
-
-  /* Specification: Implements @[FIPS203, Section 7.2, Modulus check] */
-  ret = mlk_kem_check_pk(pk);
-  if (ret != 0)
-  {
-    goto cleanup;
-  }
 
   mlk_memcpy(buf, coins, MLKEM_SYMBYTES);
 
@@ -274,7 +265,51 @@ cleanup:
   return ret;
 }
 
+/* Reference: `crypto_kem_enc_derand()` in the reference implementation @[REF]
+ *            - We include public key check
+ *            - We include stack buffer zeroization */
+MLK_EXTERNAL_API
+int mlk_kem_enc_derand(uint8_t ct[MLKEM_INDCCA_LEN_CIPHERTEXT],
+                       uint8_t ss[MLKEM_SSBYTES],
+                       const uint8_t pk[MLKEM_INDCCA_LEN_PUBLIC_KEY],
+                       const uint8_t coins[MLKEM_SYMBYTES])
+{
+  /* Specification: Implements @[FIPS203, Section 7.2, Modulus check] */
+  int ret = mlk_kem_check_pk(pk);
+  if (ret != 0)
+  {
+    return ret;
+  }
+  return mlk_kem_enc_derand_valid_pk(ct, ss, pk, coins);
+}
+
 #if !defined(MLK_CONFIG_NO_RANDOMIZED_API)
+
+MLK_INTERNAL_API
+int mlk_kem_enc_valid_pk(uint8_t ct[MLKEM_INDCCA_LEN_CIPHERTEXT],
+                         uint8_t ss[MLKEM_SSBYTES],
+                         const uint8_t pk[MLKEM_INDCCA_LEN_PUBLIC_KEY])
+{
+  int ret = 0;
+  uint8_t coins[MLKEM_SYMBYTES];
+
+  if (mlk_randombytes(coins, MLKEM_SYMBYTES) != 0)
+  {
+    ret = MLK_ERR_RNG_FAIL;
+    goto cleanup;
+  }
+
+  MLK_CT_TESTING_SECRET(coins, MLKEM_SYMBYTES);
+
+  ret = mlk_kem_enc_derand_valid_pk(ct, ss, pk, coins);
+
+cleanup:
+  /* Specification: Partially implements
+   * @[FIPS203, Section 3.3, Destruction of intermediate values] */
+  mlk_zeroize(coins, MLKEM_SYMBYTES);
+  return ret;
+}
+
 /* Reference: `crypto_kem_enc()` in the reference implementation @[REF]
  *            - We include stack buffer zeroization */
 MLK_EXTERNAL_API

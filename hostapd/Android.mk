@@ -264,7 +264,9 @@ OBJS += src/common/sae_pk.c
 endif
 NEED_ECC=y
 NEED_DH_GROUPS=y
-NEED_MLKEM=y
+ifdef CONFIG_PQC
+NEED_PQC=y
+endif
 NEED_HMAC_SHA256_KDF=y
 NEED_DRAGONFLY=y
 endif
@@ -675,7 +677,6 @@ endif
 
 ifeq ($(CONFIG_TLS), openssl)
 L_CFLAGS += -DCRYPTO_RSA_OAEP_SHA256
-L_CFLAGS += -DMLKEM_USE_OPENSSL_RAND
 ifdef TLS_FUNCS
 OBJS += src/crypto/tls_openssl.c
 OBJS += src/crypto/tls_openssl_ocsp.c
@@ -1010,14 +1011,16 @@ OBJS += src/crypto/dh_group5.c
 endif
 endif
 
-ifdef NEED_MLKEM
+ifdef NEED_ECC
+L_CFLAGS += -DCONFIG_ECC
+endif
+
+ifdef NEED_PQC
+L_CFLAGS += -DCONFIG_PQC
 include ../src/mlkem/auto.mk
 OBJS += ../src/mlkem/mlkem.c
 OBJS += ../src/mlkem/mlkem.S
-endif
-
-ifdef NEED_ECC
-L_CFLAGS += -DCONFIG_ECC
+OBJS += ../src/crypto/pqc.c
 endif
 
 ifdef CONFIG_NO_RANDOM_POOL

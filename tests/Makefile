@@ -3,7 +3,7 @@ ALL=test-base64 test-md4 test-milenage \
 	test-sha1 \
 	test-https test-https_server \
 	test-sha256 test-aes test-x509v3 test-list test-rc4 \
-	test-bss
+	test-bss test-pqc
 
 include ../src/build.rules
 
@@ -31,6 +31,7 @@ CFLAGS += -I../src/utils
 SLIBS = ../src/utils/libutils.a
 
 DLIBS = ../src/crypto/libcrypto.a \
+	../src/mlkem/libmlkem.a \
 	../src/tls/libtls.a
 
 _OBJS_VAR := LLIBS
@@ -81,7 +82,6 @@ test-sha256: $(call BUILDOBJ,test-sha256.o) $(LIBS)
 
 test-x509v3: $(call BUILDOBJ,test-x509v3.o) $(LIBS)
 	$(LDO) $(LDFLAGS) -o $@ $< $(LLIBS)
-
 
 # We could cut this down more by enabling fewer options (above)
 ELIBS += $(SRC)/crypto/libcrypto.a
@@ -140,6 +140,9 @@ LIBS=$(SLIBS) $(DLIBS) $(WPA_LIBS) $(ELIBS)
 test-bss: $(call BUILDOBJ,test-bss.o) $(WPA_OBJS) $(LIBS)
 	$(LDO) $(LDFLAGS) -o $@ $< $(LLIBS) $(WPA_CFLAGS) $(WPA_OBJS) $(LIBS)
 
+test-pqc: $(call BUILDOBJ,test-pqc.o) $(LIBS)
+	$(LDO) $(LDFLAGS) -o $@ $^ $(LLIBS)
+
 run-tests: $(ALL)
 	./test-aes
 	./test-list
@@ -149,6 +152,7 @@ run-tests: $(ALL)
 	./test-sha1
 	./test-sha256
 	./test-bss
+	./test-pqc
 	@echo
 	@echo All tests completed successfully.
 

@@ -52,6 +52,9 @@
 #if defined(__AVX2__)
 #define MLK_SYS_X86_64_AVX2
 #endif
+#if defined(__AVX512F__) && defined(__AVX512BW__)
+#define MLK_SYS_X86_64_AVX512
+#endif
 #endif /* __x86_64__ */
 
 #if defined(MLK_SYS_LITTLE_ENDIAN) && defined(__powerpc64__)
@@ -166,7 +169,11 @@
 #define MLK_RESTRICT restrict
 #endif /* restrict */
 
+#ifdef MLK_SYS_X86_64_AVX512
+#define MLK_DEFAULT_ALIGN 64
+#else
 #define MLK_DEFAULT_ALIGN 32
+#endif
 #define MLK_ALIGN_UP(N) \
   ((((N) + (MLK_DEFAULT_ALIGN - 1)) / MLK_DEFAULT_ALIGN) * MLK_DEFAULT_ALIGN)
 #if defined(__GNUC__)
@@ -248,7 +255,7 @@ static MLK_INLINE int mlk_sys_check_capability(mlk_sys_cap cap)
    * the host that the resulting library/binary will be built on.
    * If this assumption is not true, you MUST overwrite this function.
    * See the documentation of MLK_CONFIG_CUSTOM_CAPABILITY_FUNC in
-   * mlkem_config.h for more information. */
+   * config.h for more information. */
   (void)cap;
   return 1;
 }

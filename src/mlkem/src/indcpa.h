@@ -19,6 +19,35 @@
 #include "common.h"
 #include "poly_k.h"
 
+#define mlk_polyvec_permute_bitrev_to_custom MLK_NAMESPACE_K(polyvec_permute_bitrev_to_custom)
+MLK_INTERNAL_API
+void mlk_polyvec_permute_bitrev_to_custom(mlk_polyvec *v)
+    __contract__(
+        /* We don't specify that this should be a permutation, but only
+         * that it does not change the bound established at the end of mlk_gen_matrix. */
+        requires(memory_no_alias(v, sizeof(mlk_polyvec))) requires(forall(x, 0, MLKEM_K,
+                                                                          array_bound(v->vec[x].coeffs, 0, MLKEM_N, 0, MLKEM_Q)))
+            assigns(memory_slice(v, sizeof(mlk_polyvec)))
+                ensures(forall(x, 0, MLKEM_K,
+                               array_bound(v->vec[x].coeffs, 0, MLKEM_N, 0, MLKEM_Q))));
+
+#define mlk_polymat_permute_bitrev_to_custom MLK_NAMESPACE_K(polymat_permute_bitrev_to_custom)
+MLK_INTERNAL_API
+void mlk_polymat_permute_bitrev_to_custom(mlk_polymat *a)
+    __contract__(
+        /* We don't specify that this should be a permutation, but only
+         * that it does not change the bound established at the end of mlk_gen_matrix. */
+        requires(memory_no_alias(a, sizeof(mlk_polymat))) requires(forall(x, 0, MLKEM_K, forall(y, 0, MLKEM_K, array_bound(a->vec[x].vec[y].coeffs, 0, MLKEM_N, 0, MLKEM_Q))))
+            assigns(memory_slice(a, sizeof(mlk_polymat)))
+                ensures(forall(x, 0, MLKEM_K, forall(y, 0, MLKEM_K, array_bound(a->vec[x].vec[y].coeffs, 0, MLKEM_N, 0, MLKEM_Q)))));
+
+#define mlk_gen_vector MLK_NAMESPACE_K(gen_vector)
+MLK_INTERNAL_API
+void mlk_gen_vector(
+    mlk_polyvec *v,
+    const uint8_t seed[MLKEM_SYMBYTES],
+    int transposed);
+
 #define mlk_gen_matrix MLK_NAMESPACE_K(gen_matrix)
 /*************************************************
  * Name:        mlk_gen_matrix
@@ -38,8 +67,10 @@
  *
  **************************************************/
 MLK_INTERNAL_API
-void mlk_gen_matrix(mlk_polymat *a, const uint8_t seed[MLKEM_SYMBYTES],
-                    int transposed)
+void mlk_gen_matrix(
+    mlk_polymat *a,
+    const uint8_t seed[MLKEM_SYMBYTES],
+    int transposed)
     __contract__(
         requires(memory_no_alias(a, sizeof(mlk_polymat))) requires(memory_no_alias(seed, MLKEM_SYMBYTES)) requires(transposed == 0 || transposed == 1)
             assigns(memory_slice(a, sizeof(mlk_polymat)))

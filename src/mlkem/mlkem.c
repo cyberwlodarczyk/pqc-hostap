@@ -5,6 +5,8 @@
 
 /* Three instances of mlkem-native for all security levels */
 
+#define _POSIX_C_SOURCE 199309L
+
 /* Include level-independent code */
 #define MLK_CONFIG_MULTILEVEL_WITH_SHARED 1
 /* Keep level-independent headers at the end of monobuild file */

@@ -26,22 +26,22 @@
 
 #if defined(MLK_CHECK_APIS)
 /* Include to ensure consistency between internal kem.h
- * and external mlkem_base.h. */
-#include "mlkem_base.h"
+ * and external base.h. */
+#include "base.h"
 
 #if MLKEM_INDCCA_LEN_SECRET_KEY != \
     MLKEM_LEN_SECRET_KEY(MLK_CONFIG_PARAMETER_SET)
-#error Mismatch for SECRETKEYBYTES between kem.h and mlkem_base.h
+#error Mismatch for SECRETKEYBYTES between kem.h and base.h
 #endif
 
 #if MLKEM_INDCCA_LEN_PUBLIC_KEY != \
     MLKEM_LEN_PUBLIC_KEY(MLK_CONFIG_PARAMETER_SET)
-#error Mismatch for PUBLICKEYBYTES between kem.h and mlkem_base.h
+#error Mismatch for PUBLICKEYBYTES between kem.h and base.h
 #endif
 
 #if MLKEM_INDCCA_LEN_CIPHERTEXT != \
     MLKEM_LEN_CIPHERTEXT(MLK_CONFIG_PARAMETER_SET)
-#error Mismatch for CIPHERTEXTBYTES between kem.h and mlkem_base.h
+#error Mismatch for CIPHERTEXTBYTES between kem.h and base.h
 #endif
 
 #endif /* MLK_CHECK_APIS */
@@ -172,6 +172,14 @@ int mlk_kem_keypair(uint8_t pk[MLKEM_INDCCA_LEN_PUBLIC_KEY],
                     ensures(return_value == 0 || return_value == MLK_ERR_FAIL ||
                             return_value == MLK_ERR_RNG_FAIL));
 
+#define mlk_kem_enc_derand_valid_pk MLK_NAMESPACE_K(enc_derand_valid_pk)
+MLK_INTERNAL_API
+int mlk_kem_enc_derand_valid_pk(
+    uint8_t ct[MLKEM_INDCCA_LEN_CIPHERTEXT],
+    uint8_t ss[MLKEM_SSBYTES],
+    const uint8_t pk[MLKEM_INDCCA_LEN_PUBLIC_KEY],
+    const uint8_t coins[MLKEM_SYMBYTES]);
+
 /*************************************************
  * Name:        mlk_kem_enc_derand
  *
@@ -208,6 +216,12 @@ int mlk_kem_enc_derand(uint8_t ct[MLKEM_INDCCA_LEN_CIPHERTEXT],
             assigns(memory_slice(ct, MLKEM_INDCCA_LEN_CIPHERTEXT))
                 assigns(memory_slice(ss, MLKEM_SSBYTES))
                     ensures(return_value == 0 || return_value == MLK_ERR_FAIL));
+
+#define mlk_kem_enc_valid_pk MLK_NAMESPACE_K(enc_valid_pk)
+MLK_INTERNAL_API
+int mlk_kem_enc_valid_pk(uint8_t ct[MLKEM_INDCCA_LEN_CIPHERTEXT],
+                         uint8_t ss[MLKEM_SSBYTES],
+                         const uint8_t pk[MLKEM_INDCCA_LEN_PUBLIC_KEY]);
 
 /*************************************************
  * Name:        mlk_kem_enc

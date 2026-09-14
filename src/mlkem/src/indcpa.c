@@ -35,10 +35,6 @@
 #define mlk_pack_ciphertext MLK_ADD_PARAM_SET(mlk_pack_ciphertext)
 #define mlk_unpack_ciphertext MLK_ADD_PARAM_SET(mlk_unpack_ciphertext)
 #define mlk_matvec_mul MLK_ADD_PARAM_SET(mlk_matvec_mul)
-#define mlk_polyvec_permute_bitrev_to_custom \
-    MLK_ADD_PARAM_SET(mlk_polyvec_permute_bitrev_to_custom)
-#define mlk_polymat_permute_bitrev_to_custom \
-    MLK_ADD_PARAM_SET(mlk_polymat_permute_bitrev_to_custom)
 #define mlk_keypair_getnoise_eta1 MLK_ADD_PARAM_SET(mlk_keypair_getnoise_eta1)
 /* End of parameter set namespacing */
 
@@ -184,16 +180,8 @@ static void mlk_unpack_ciphertext(mlk_polyvec *b, mlk_poly *v,
  *
  * We don't inline this into gen_matrix to avoid having to split the CBMC
  * proof for gen_matrix based on MLK_USE_NATIVE_NTT_CUSTOM_ORDER. */
-static void mlk_polyvec_permute_bitrev_to_custom(mlk_polyvec *v)
-    __contract__(
-        /* We don't specify that this should be a permutation, but only
-         * that it does not change the bound established at the end of mlk_gen_matrix. */
-        requires(memory_no_alias(v, sizeof(mlk_polyvec)))
-            requires(forall(x, 0, MLKEM_K,
-                            array_bound(v->vec[x].coeffs, 0, MLKEM_N, 0, MLKEM_Q)))
-                assigns(memory_slice(v, sizeof(mlk_polyvec)))
-                    ensures(forall(x, 0, MLKEM_K,
-                                   array_bound(v->vec[x].coeffs, 0, MLKEM_N, 0, MLKEM_Q))))
+MLK_INTERNAL_API
+void mlk_polyvec_permute_bitrev_to_custom(mlk_polyvec *v)
 {
 #if defined(MLK_USE_NATIVE_NTT_CUSTOM_ORDER)
     unsigned i;
@@ -213,14 +201,8 @@ static void mlk_polyvec_permute_bitrev_to_custom(mlk_polyvec *v)
 #endif /* !MLK_USE_NATIVE_NTT_CUSTOM_ORDER */
 }
 
-static void mlk_polymat_permute_bitrev_to_custom(mlk_polymat *a)
-    __contract__(
-        /* We don't specify that this should be a permutation, but only
-         * that it does not change the bound established at the end of mlk_gen_matrix. */
-        requires(memory_no_alias(a, sizeof(mlk_polymat)))
-            requires(forall(x, 0, MLKEM_K, forall(y, 0, MLKEM_K, array_bound(a->vec[x].vec[y].coeffs, 0, MLKEM_N, 0, MLKEM_Q))))
-                assigns(memory_slice(a, sizeof(mlk_polymat)))
-                    ensures(forall(x, 0, MLKEM_K, forall(y, 0, MLKEM_K, array_bound(a->vec[x].vec[y].coeffs, 0, MLKEM_N, 0, MLKEM_Q)))))
+MLK_INTERNAL_API
+void mlk_polymat_permute_bitrev_to_custom(mlk_polymat *a)
 {
     unsigned i;
     for (i = 0; i < MLKEM_K; i++)
@@ -234,6 +216,76 @@ static void mlk_polymat_permute_bitrev_to_custom(mlk_polymat *a)
         }
 }
 
+MLK_INTERNAL_API
+void mlk_gen_vector(
+    mlk_polyvec *v,
+    const uint8_t seed[MLKEM_SYMBYTES],
+    int transposed)
+{
+#if !defined(MLK_CONFIG_SERIAL_FIPS202_ONLY) && defined(MLK_USE_NATIVE_REJ_UNIFORM)
+    MLK_ALIGN uint8_t seed_ext[4][MLK_ALIGN_UP(MLKEM_SYMBYTES + 2)];
+    for (uint8_t x = 0; x < 4; x++)
+    {
+        mlk_memcpy(seed_ext[x], seed, MLKEM_SYMBYTES);
+        if (transposed)
+        {
+            seed_ext[x][MLKEM_SYMBYTES + 0] = 0;
+            seed_ext[x][MLKEM_SYMBYTES + 1] = x;
+        }
+        else
+        {
+            seed_ext[x][MLKEM_SYMBYTES + 0] = x;
+            seed_ext[x][MLKEM_SYMBYTES + 1] = 0;
+        }
+    }
+#if MLKEM_K == 4
+    mlk_poly_rej_uniform_x4(
+        &v->vec[0],
+        &v->vec[1],
+        &v->vec[2],
+        &v->vec[3],
+        seed_ext);
+#elif MLKEM_K == 3
+    mlk_poly p4;
+    mlk_poly_rej_uniform_x4(
+        &v->vec[0],
+        &v->vec[1],
+        &v->vec[2],
+        &p4,
+        seed_ext);
+    mlk_zeroize(&p4, sizeof(mlk_poly));
+#elif MLKEM_K == 2
+    mlk_poly p3, p4;
+    mlk_poly_rej_uniform_x4(
+        &v->vec[0],
+        &v->vec[1],
+        &p3,
+        &p4,
+        seed_ext);
+    mlk_zeroize(&p3, sizeof(mlk_poly));
+    mlk_zeroize(&p4, sizeof(mlk_poly));
+#endif
+#else
+    MLK_ALIGN uint8_t seed_ext[MLK_ALIGN_UP(MLKEM_SYMBYTES + 2)];
+    mlk_memcpy(seed_ext, seed, MLKEM_SYMBYTES);
+    for (uint8_t x = 0; x < MLKEM_K; x++)
+    {
+        if (transposed)
+        {
+            seed_ext[MLKEM_SYMBYTES + 0] = 0;
+            seed_ext[MLKEM_SYMBYTES + 1] = x;
+        }
+        else
+        {
+            seed_ext[MLKEM_SYMBYTES + 0] = x;
+            seed_ext[MLKEM_SYMBYTES + 1] = 0;
+        }
+        mlk_poly_rej_uniform(&v->vec[x], seed_ext);
+    }
+#endif
+    mlk_polyvec_permute_bitrev_to_custom(v);
+}
+
 /* Reference: `gen_matrix()` in the reference implementation @[REF].
  *            - We use a special subroutine to generate 4 polynomials
  *              at a time, to be able to leverage batched Keccak-f1600
@@ -242,8 +294,10 @@ static void mlk_polymat_permute_bitrev_to_custom(mlk_polymat *a)
  *
  * Not static for benchmarking */
 MLK_INTERNAL_API
-void mlk_gen_matrix(mlk_polymat *a, const uint8_t seed[MLKEM_SYMBYTES],
-                    int transposed)
+void mlk_gen_matrix(
+    mlk_polymat *a,
+    const uint8_t seed[MLKEM_SYMBYTES],
+    int transposed)
 {
     unsigned i, j;
     MLK_ALIGN uint8_t seed_ext[4][MLK_ALIGN_UP(MLKEM_SYMBYTES + 2)];
@@ -620,6 +674,4 @@ int mlk_indcpa_dec(uint8_t m[MLKEM_INDCPA_MSGBYTES],
 #undef mlk_pack_ciphertext
 #undef mlk_unpack_ciphertext
 #undef mlk_matvec_mul
-#undef mlk_polyvec_permute_bitrev_to_custom
-#undef mlk_polymat_permute_bitrev_to_custom
 #undef mlk_keypair_getnoise_eta1

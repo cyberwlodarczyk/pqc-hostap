@@ -51,6 +51,12 @@ ifeq ($(ARCH),x86_64)
 # Test AVX2 support using C with inline assembly
 MK_COMPILER_SUPPORTS_AVX2 ?= $(shell echo 'int main() { __asm__("vpxor %%ymm0, %%ymm1, %%ymm2" ::: "ymm0", "ymm1", "ymm2"); return 0; }' | $(CC) -mavx2 -x c - -c -o /dev/null 2>/dev/null && echo 1 || echo 0)
 
+# Test AVX512F support using C with inline assembly
+MK_COMPILER_SUPPORTS_AVX512F ?= $(shell echo 'int main() { __asm__("vpxord %%zmm0, %%zmm1, %%zmm2" ::: "zmm0", "zmm1", "zmm2"); return 0; }' | $(CC) -mavx512f -x c - -c -o /dev/null 2>/dev/null && echo 1 || echo 0)
+
+# Test AVX512BW support using C with inline assembly
+MK_COMPILER_SUPPORTS_AVX512BW ?= $(shell echo 'int main() { __asm__("vpmullw %%zmm0, %%zmm1, %%zmm2" ::: "zmm0", "zmm1", "zmm2"); return 0; }' | $(CC) -mavx512bw -x c - -c -o /dev/null 2>/dev/null && echo 1 || echo 0)
+
 # Test SSE2 support using C with inline assembly
 MK_COMPILER_SUPPORTS_SSE2 ?= $(shell echo 'int main() { __asm__("pxor %%xmm0, %%xmm1" ::: "xmm0", "xmm1"); return 0; }' | $(CC) -msse2 -x c - -c -o /dev/null 2>/dev/null && echo 1 || echo 0)
 
@@ -91,6 +97,8 @@ ifeq ($(ARCH),x86_64)
 ifeq ($(HOST_PLATFORM),Linux-x86_64)
 # Linux: Use /proc/cpuinfo
 MK_HOST_SUPPORTS_AVX2 := $(call check_host_feature,avx2,cat /proc/cpuinfo)
+MK_HOST_SUPPORTS_AVX512F := $(call check_host_feature,avx512f,cat /proc/cpuinfo)
+MK_HOST_SUPPORTS_AVX512BW := $(call check_host_feature,avx512bw,cat /proc/cpuinfo)
 MK_HOST_SUPPORTS_SSE2 := $(call check_host_feature,sse2,cat /proc/cpuinfo)
 MK_HOST_SUPPORTS_BMI2 := $(call check_host_feature,bmi2,cat /proc/cpuinfo)
 else ifeq ($(HOST_PLATFORM),Darwin-x86_64)
@@ -161,6 +169,14 @@ CFLAGS += -DMLK_FORCE_X86_64
 # Add flags only if both compiler and host support the feature
 ifeq ($(MK_COMPILER_SUPPORTS_AVX2)$(MK_HOST_SUPPORTS_AVX2),11)
 CFLAGS += -mavx2
+endif
+
+ifeq ($(MK_COMPILER_SUPPORTS_AVX512F)$(MK_HOST_SUPPORTS_AVX512F),11)
+CFLAGS += -mavx512f
+endif
+
+ifeq ($(MK_COMPILER_SUPPORTS_AVX512BW)$(MK_HOST_SUPPORTS_AVX512BW),11)
+CFLAGS += -mavx512bw
 endif
 
 ifeq ($(MK_COMPILER_SUPPORTS_BMI2)$(MK_HOST_SUPPORTS_BMI2),11)

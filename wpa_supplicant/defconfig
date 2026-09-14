@@ -686,3 +686,6 @@ CONFIG_DPP2=y
 
 # Wi-Fi Aware unsynchronized service discovery (NAN USD)
 #CONFIG_NAN_USD=y
+
+# Post-Quantum Cryptography
+#CONFIG_PQC=y

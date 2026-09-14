@@ -27,7 +27,7 @@
 /*
  * Test configuration: Multilevel monolithic build config with native backends
  *
- * This configuration differs from the default mlkem/mlkem_config.h in
+ * This configuration differs from the default mlkem/config.h in
  * the following places:
  *   - MLK_CONFIG_NO_SUPERCOP
  *   - MLK_CONFIG_MULTILEVEL_BUILD
@@ -67,7 +67,7 @@
  * Name:        MLK_CONFIG_FILE
  *
  * Description: If defined, this is a header that will be included instead
- *              of the default configuration file mlkem/mlkem_config.h.
+ *              of the default configuration file mlkem/config.h.
  *
  *              When you need to build mlkem-native in multiple configurations,
  *              using varying MLK_CONFIG_FILE can be more convenient
@@ -80,7 +80,7 @@
  *
  *****************************************************************************/
 /* No need to set this -- we _are_ already in a custom config */
-/* #define MLK_CONFIG_FILE "mlkem_config.h" */
+/* #define MLK_CONFIG_FILE "config.h" */
 
 /******************************************************************************
  * Name:        MLK_CONFIG_NAMESPACE_PREFIX
@@ -154,7 +154,7 @@
 /******************************************************************************
  * Name:        MLK_CONFIG_NO_SUPERCOP
  *
- * Description: By default, mlkem_base.h exposes the mlkem-native API in the
+ * Description: By default, base.h exposes the mlkem-native API in the
  *              SUPERCOP naming convention (crypto_kem_xxx). If you don't need
  *              this, set MLK_CONFIG_NO_SUPERCOP.
  *
@@ -170,7 +170,7 @@
  * Description: If you only need the size constants (MLKEM_LEN_PUBLIC_KEY, etc.)
  *              but no function declarations, set MLK_CONFIG_CONSTANTS_ONLY.
  *
- *              This only affects the public header mlkem_base.h, not
+ *              This only affects the public header base.h, not
  *              the implementation.
  *
  *****************************************************************************/
@@ -181,7 +181,7 @@
  * Build-only configuration options
  *
  * The remaining configurations are build-options only.
- * They do not affect the API described in mlkem_base.h.
+ * They do not affect the API described in base.h.
  *
  *****************************************************************************/
 
@@ -705,5 +705,7 @@
 #elif MLK_CONFIG_PARAMETER_SET == 1024
 #define MLK_DEFAULT_NAMESPACE_PREFIX PQCP_MLKEM_NATIVE_MLKEM1024
 #endif
+
+#define MLK_CONFIG_TEMPO_FLS185
 
 #endif /* !MLK_CONFIG_H */

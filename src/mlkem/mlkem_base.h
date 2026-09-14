@@ -21,7 +21,7 @@
  * This header defines the public API of a single build of mlkem-native.
  *
  * Make sure the configuration file is in the include path
- * (this is "mlkem_config.h" by default, or MLK_CONFIG_FILE if defined).
+ * (this is "config.h" by default, or MLK_CONFIG_FILE if defined).
  *
  * # Multi-level builds
  *
@@ -83,7 +83,7 @@
 #define TEMPO512_LEN_SECRET_KEY MLKEM512_LEN_SECRET_KEY
 #define TEMPO512_LEN_PUBLIC_KEY MLKEM512_LEN_PUBLIC_KEY
 #define TEMPO512_LEN_CIPHERTEXT MLKEM512_LEN_CIPHERTEXT
-#define TEMPO512_LEN_APK 848
+#define TEMPO512_LEN_MSG 848
 #define TEMPO512_LEN_TAG 32
 
 #define MLKEM768_LEN_SECRET_KEY 2400
@@ -92,7 +92,7 @@
 #define TEMPO768_LEN_SECRET_KEY MLKEM768_LEN_SECRET_KEY
 #define TEMPO768_LEN_PUBLIC_KEY MLKEM768_LEN_PUBLIC_KEY
 #define TEMPO768_LEN_CIPHERTEXT MLKEM768_LEN_CIPHERTEXT
-#define TEMPO768_LEN_APK 1256
+#define TEMPO768_LEN_MSG 1256
 #define TEMPO768_LEN_TAG 48
 
 #define MLKEM1024_LEN_SECRET_KEY 3168
@@ -101,7 +101,7 @@
 #define TEMPO1024_LEN_SECRET_KEY MLKEM1024_LEN_SECRET_KEY
 #define TEMPO1024_LEN_PUBLIC_KEY MLKEM1024_LEN_PUBLIC_KEY
 #define TEMPO1024_LEN_CIPHERTEXT MLKEM1024_LEN_CIPHERTEXT
-#define TEMPO1024_LEN_APK 1664
+#define TEMPO1024_LEN_MSG 1664
 #define TEMPO1024_LEN_TAG 64
 
 /* check-magic: on */
@@ -117,17 +117,15 @@
 #define MLKEM768_LEN_SHARED_SECRET MLKEM_LEN_SHARED_SECRET
 #define MLKEM1024_LEN_SHARED_SECRET MLKEM_LEN_SHARED_SECRET
 
-#define TEMPO512_LEN_SHARED_SECRET 16
-#define TEMPO768_LEN_SHARED_SECRET 24
+#define TEMPO512_LEN_SHARED_SECRET 32
+#define TEMPO768_LEN_SHARED_SECRET 32
 #define TEMPO1024_LEN_SHARED_SECRET 32
 
+#define TEMPO_LEN_COUNTER 2
+#define TEMPO_LEN_SHARED_SECRET MLKEM_LEN_SHARED_SECRET
+#define TEMPO_LEN_MASTER_KEY 32
 #define TEMPO_LEN_SID 32
 #define TEMPO_LEN_PWD 32
-
-#define TEMPO_LEN_EPHEMERAL_KEY MLKEM_LEN_SHARED_SECRET
-#define TEMPO512_LEN_EPHEMERAL_KEY TEMPO_LEN_EPHEMERAL_KEY
-#define TEMPO768_LEN_EPHEMERAL_KEY TEMPO_LEN_EPHEMERAL_KEY
-#define TEMPO1024_LEN_EPHEMERAL_KEY TEMPO_LEN_EPHEMERAL_KEY
 
 /* Sizes of cryptographic material, as a function of LVL=512,768,1024 */
 #define MLKEM_LEN_SECRET_KEY_(LVL) MLKEM##LVL##_LEN_SECRET_KEY
@@ -136,8 +134,7 @@
 #define TEMPO_LEN_SECRET_KEY_(LVL) TEMPO##LVL##_LEN_SECRET_KEY
 #define TEMPO_LEN_PUBLIC_KEY_(LVL) TEMPO##LVL##_LEN_PUBLIC_KEY
 #define TEMPO_LEN_CIPHERTEXT_(LVL) TEMPO##LVL##_LEN_CIPHERTEXT
-#define TEMPO_LEN_SHARED_SECRET_(LVL) TEMPO##LVL##_LEN_SHARED_SECRET
-#define TEMPO_LEN_APK_(LVL) TEMPO##LVL##_LEN_APK
+#define TEMPO_LEN_MSG_(LVL) TEMPO##LVL##_LEN_MSG
 #define TEMPO_LEN_TAG_(LVL) TEMPO##LVL##_LEN_TAG
 #define MLKEM_LEN_SECRET_KEY(LVL) MLKEM_LEN_SECRET_KEY_(LVL)
 #define MLKEM_LEN_PUBLIC_KEY(LVL) MLKEM_LEN_PUBLIC_KEY_(LVL)
@@ -145,8 +142,7 @@
 #define TEMPO_LEN_SECRET_KEY(LVL) TEMPO_LEN_SECRET_KEY_(LVL)
 #define TEMPO_LEN_PUBLIC_KEY(LVL) TEMPO_LEN_PUBLIC_KEY_(LVL)
 #define TEMPO_LEN_CIPHERTEXT(LVL) TEMPO_LEN_CIPHERTEXT_(LVL)
-#define TEMPO_LEN_SHARED_SECRET(LVL) TEMPO_LEN_SHARED_SECRET_(LVL)
-#define TEMPO_LEN_APK(LVL) TEMPO_LEN_APK_(LVL)
+#define TEMPO_LEN_MSG(LVL) TEMPO_LEN_MSG_(LVL)
 #define TEMPO_LEN_TAG(LVL) TEMPO_LEN_TAG_(LVL)
 
 /****************************** Error codes ***********************************/
@@ -156,6 +152,8 @@
 /* An rng failure occured. Might be due to insufficient entropy or
  * system misconfiguration. */
 #define MLK_ERR_RNG_FAIL -3
+
+#define MLK_ERR_DIGEST_FAIL -4
 
 /****************************** Function API **********************************/
 
@@ -417,45 +415,67 @@ extern "C"
         const uint8_t sk[MLKEM_LEN_SECRET_KEY(MLK_CONFIG_API_PARAMETER_SET)]);
 
     MLK_API_QUALIFIER
-    void MLK_API_TEMPO_NAMESPACE(keygen)(
-        uint8_t public_key[TEMPO_LEN_PUBLIC_KEY(MLK_CONFIG_API_PARAMETER_SET)],
-        uint8_t secret_key[TEMPO_LEN_SECRET_KEY(MLK_CONFIG_API_PARAMETER_SET)],
-        uint8_t apk[TEMPO_LEN_APK(MLK_CONFIG_API_PARAMETER_SET)],
+    MLK_API_MUST_CHECK_RETURN_VALUE
+    int MLK_API_TEMPO_NAMESPACE(keygen)(
+        uint8_t req[TEMPO_LEN_MSG(MLK_CONFIG_API_PARAMETER_SET)],
+        uint8_t pk[TEMPO_LEN_PUBLIC_KEY(MLK_CONFIG_API_PARAMETER_SET)],
+        uint8_t sk[TEMPO_LEN_SECRET_KEY(MLK_CONFIG_API_PARAMETER_SET)],
         const uint8_t sid[TEMPO_LEN_SID],
         const uint8_t pwd[TEMPO_LEN_PWD]);
 
     MLK_API_QUALIFIER
-    void MLK_API_TEMPO_NAMESPACE(encaps)(
-        uint8_t public_key[TEMPO_LEN_PUBLIC_KEY(MLK_CONFIG_API_PARAMETER_SET)],
-        uint8_t ciphertext[TEMPO_LEN_CIPHERTEXT(MLK_CONFIG_API_PARAMETER_SET)],
-        uint8_t ephemeral_key[TEMPO_LEN_EPHEMERAL_KEY],
+    MLK_API_MUST_CHECK_RETURN_VALUE
+    int MLK_API_TEMPO_NAMESPACE(encaps)(
+        uint8_t res[TEMPO_LEN_MSG(MLK_CONFIG_API_PARAMETER_SET)],
+        uint8_t pk[TEMPO_LEN_PUBLIC_KEY(MLK_CONFIG_API_PARAMETER_SET)],
+        uint8_t ss[TEMPO_LEN_SHARED_SECRET],
+        const uint8_t req[TEMPO_LEN_MSG(MLK_CONFIG_API_PARAMETER_SET)],
         const uint8_t sid[TEMPO_LEN_SID],
-        const uint8_t pwd[TEMPO_LEN_PWD],
-        const uint8_t apk[TEMPO_LEN_APK(MLK_CONFIG_API_PARAMETER_SET)]);
+        const uint8_t pwd[TEMPO_LEN_PWD]);
 
     MLK_API_QUALIFIER
-    void MLK_API_TEMPO_NAMESPACE(decaps)(
-        uint8_t ephemeral_key[TEMPO_LEN_EPHEMERAL_KEY],
-        const uint8_t secret_key[TEMPO_LEN_SECRET_KEY(MLK_CONFIG_API_PARAMETER_SET)],
-        const uint8_t ciphertext[TEMPO_LEN_CIPHERTEXT(MLK_CONFIG_API_PARAMETER_SET)]);
+    MLK_API_MUST_CHECK_RETURN_VALUE
+    int MLK_API_TEMPO_NAMESPACE(decaps)(
+        uint8_t ss[TEMPO_LEN_SHARED_SECRET],
+        const uint8_t sk[TEMPO_LEN_SECRET_KEY(MLK_CONFIG_API_PARAMETER_SET)],
+        const uint8_t res[TEMPO_LEN_MSG(MLK_CONFIG_API_PARAMETER_SET)]);
 
     MLK_API_QUALIFIER
-    void MLK_API_TEMPO_NAMESPACE(confirm)(
-        uint8_t tag_a[TEMPO_LEN_TAG(MLK_CONFIG_API_PARAMETER_SET)],
-        uint8_t tag_b[TEMPO_LEN_TAG(MLK_CONFIG_API_PARAMETER_SET)],
-        uint8_t shared_secret[TEMPO_LEN_SHARED_SECRET(MLK_CONFIG_API_PARAMETER_SET)],
+    MLK_API_MUST_CHECK_RETURN_VALUE
+    int MLK_API_TEMPO_NAMESPACE(confirm)(
+        uint8_t tag[TEMPO_LEN_TAG(MLK_CONFIG_API_PARAMETER_SET)],
+        const uint8_t ctr[TEMPO_LEN_COUNTER],
+        const uint8_t pk[TEMPO_LEN_PUBLIC_KEY(MLK_CONFIG_API_PARAMETER_SET)],
+        const uint8_t sk[TEMPO_LEN_SECRET_KEY(MLK_CONFIG_API_PARAMETER_SET)],
+        const uint8_t req[TEMPO_LEN_MSG(MLK_CONFIG_API_PARAMETER_SET)],
+        const uint8_t res[TEMPO_LEN_MSG(MLK_CONFIG_API_PARAMETER_SET)],
+        const uint8_t ss[TEMPO_LEN_SHARED_SECRET],
         const uint8_t sid[TEMPO_LEN_SID],
-        const uint8_t pwd[TEMPO_LEN_PWD],
-        const uint8_t apk[TEMPO_LEN_APK(MLK_CONFIG_API_PARAMETER_SET)],
-        const uint8_t ciphertext[TEMPO_LEN_CIPHERTEXT(MLK_CONFIG_API_PARAMETER_SET)],
-        const uint8_t public_key[TEMPO_LEN_PUBLIC_KEY(MLK_CONFIG_API_PARAMETER_SET)],
-        const uint8_t ephemeral_key[TEMPO_LEN_EPHEMERAL_KEY]);
+        const uint8_t pwd[TEMPO_LEN_PWD]);
 
     MLK_API_QUALIFIER
     MLK_API_MUST_CHECK_RETURN_VALUE
     int MLK_API_TEMPO_NAMESPACE(verify)(
-        uint8_t tag[TEMPO_LEN_TAG(MLK_CONFIG_API_PARAMETER_SET)],
-        uint8_t peer_tag[TEMPO_LEN_TAG(MLK_CONFIG_API_PARAMETER_SET)]);
+        const uint8_t peer_tag[TEMPO_LEN_TAG(MLK_CONFIG_API_PARAMETER_SET)],
+        const uint8_t peer_ctr[TEMPO_LEN_COUNTER],
+        const uint8_t pk[TEMPO_LEN_PUBLIC_KEY(MLK_CONFIG_API_PARAMETER_SET)],
+        const uint8_t sk[TEMPO_LEN_SECRET_KEY(MLK_CONFIG_API_PARAMETER_SET)],
+        const uint8_t req[TEMPO_LEN_MSG(MLK_CONFIG_API_PARAMETER_SET)],
+        const uint8_t res[TEMPO_LEN_MSG(MLK_CONFIG_API_PARAMETER_SET)],
+        const uint8_t ss[TEMPO_LEN_SHARED_SECRET],
+        const uint8_t sid[TEMPO_LEN_SID],
+        const uint8_t pwd[TEMPO_LEN_PWD]);
+
+    MLK_API_QUALIFIER
+    MLK_API_MUST_CHECK_RETURN_VALUE
+    int MLK_API_TEMPO_NAMESPACE(finish)(
+        uint8_t mk[TEMPO_LEN_MASTER_KEY],
+        const uint8_t pk[TEMPO_LEN_PUBLIC_KEY(MLK_CONFIG_API_PARAMETER_SET)],
+        const uint8_t req[TEMPO_LEN_MSG(MLK_CONFIG_API_PARAMETER_SET)],
+        const uint8_t res[TEMPO_LEN_MSG(MLK_CONFIG_API_PARAMETER_SET)],
+        const uint8_t ss[TEMPO_LEN_SHARED_SECRET],
+        const uint8_t sid[TEMPO_LEN_SID],
+        const uint8_t pwd[TEMPO_LEN_PWD]);
 
 #ifdef __cplusplus
 }
@@ -509,7 +529,7 @@ extern "C"
  * By default mlkem-native performs all memory allocations on the stack.
  * Alternatively, mlkem-native supports custom allocation of large structures
  * through the `MLK_CONFIG_CUSTOM_ALLOC_FREE` configuration option.
- * See mlkem_config.h for details.
+ * See config.h for details.
  *
  * `MLK_TOTAL_ALLOC_{512,768,1024}_{KEYPAIR,ENCAPS,DECAPS}` indicates the
  * maximum (accumulative) allocation via MLK_ALLOC for each parameter set and

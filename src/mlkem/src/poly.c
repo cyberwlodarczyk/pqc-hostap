@@ -20,7 +20,6 @@
 #include "common.h"
 #if !defined(MLK_CONFIG_MULTILEVEL_NO_SHARED)
 
-
 #include "cbmc.h"
 #include "debug.h"
 #include "poly.h"
@@ -45,10 +44,9 @@
 
 /* Reference: `fqmul()` in the reference implementation @[REF]. */
 static MLK_INLINE int16_t mlk_fqmul(int16_t a, int16_t b)
-__contract__(
-  requires(b > -MLKEM_Q_HALF && b < MLKEM_Q_HALF)
-  ensures(return_value > -MLKEM_Q && return_value < MLKEM_Q)
-)
+    __contract__(
+        requires(b > -MLKEM_Q_HALF && b < MLKEM_Q_HALF)
+            ensures(return_value > -MLKEM_Q && return_value < MLKEM_Q))
 {
   int16_t res;
   mlk_assert_abs_bound(&b, 1, MLKEM_Q_HALF);
@@ -80,9 +78,8 @@ __contract__(
 
 /* Reference: `barrett_reduce()` in the reference implementation @[REF]. */
 static MLK_INLINE int16_t mlk_barrett_reduce(int16_t a)
-__contract__(
-  ensures(return_value > -MLKEM_Q_HALF && return_value < MLKEM_Q_HALF)
-)
+    __contract__(
+        ensures(return_value > -MLKEM_Q_HALF && return_value < MLKEM_Q_HALF))
 {
   /* Barrett reduction approximates
    * ```
@@ -114,22 +111,21 @@ __contract__(
 
 /* Reference: `poly_tomont()` in the reference implementation @[REF]. */
 MLK_STATIC_TESTABLE void mlk_poly_tomont_c(mlk_poly *r)
-__contract__(
-  requires(memory_no_alias(r, sizeof(mlk_poly)))
-  assigns(memory_slice(r, sizeof(mlk_poly)))
-  ensures(array_abs_bound(r->coeffs, 0, MLKEM_N, MLKEM_Q))
-)
+    __contract__(
+        requires(memory_no_alias(r, sizeof(mlk_poly)))
+            assigns(memory_slice(r, sizeof(mlk_poly)))
+                ensures(array_abs_bound(r->coeffs, 0, MLKEM_N, MLKEM_Q)))
 {
   unsigned i;
   const int16_t f = 1353; /* check-magic: 1353 == signed_mod(2^32, MLKEM_Q) */
   for (i = 0; i < MLKEM_N; i++)
-  __loop__(
-    invariant(i <= MLKEM_N)
-    invariant(array_abs_bound(r->coeffs, 0, i, MLKEM_Q))
-    decreases(MLKEM_N - i))
-  {
-    r->coeffs[i] = mlk_fqmul(r->coeffs[i], f);
-  }
+    __loop__(
+        invariant(i <= MLKEM_N)
+            invariant(array_abs_bound(r->coeffs, 0, i, MLKEM_Q))
+                decreases(MLKEM_N - i))
+    {
+      r->coeffs[i] = mlk_fqmul(r->coeffs[i], f);
+    }
 
   mlk_assert_abs_bound(r, MLKEM_N, MLKEM_Q);
 }
@@ -166,10 +162,10 @@ void mlk_poly_tomont(mlk_poly *r)
  *              see below. in the reference implementation @[REF], this logic is
  *              part of all compression functions (see `compress.c`). */
 static MLK_INLINE int16_t mlk_scalar_signed_to_unsigned_q(int16_t c)
-__contract__(
-  requires(c > -MLKEM_Q && c < MLKEM_Q)
-  ensures(return_value >= 0 && return_value < MLKEM_Q)
-  ensures(return_value == (int32_t)c + (((int32_t)c < 0) * MLKEM_Q)))
+    __contract__(
+        requires(c > -MLKEM_Q && c < MLKEM_Q)
+            ensures(return_value >= 0 && return_value < MLKEM_Q)
+                ensures(return_value == (int32_t)c + (((int32_t)c < 0) * MLKEM_Q)))
 {
   mlk_assert_abs_bound(&c, 1, MLKEM_Q);
 
@@ -191,25 +187,24 @@ __contract__(
  *              This conditional addition is then dropped from all
  *              polynomial compression functions instead (see `compress.c`). */
 MLK_STATIC_TESTABLE void mlk_poly_reduce_c(mlk_poly *r)
-__contract__(
-  requires(memory_no_alias(r, sizeof(mlk_poly)))
-  assigns(memory_slice(r, sizeof(mlk_poly)))
-  ensures(array_bound(r->coeffs, 0, MLKEM_N, 0, MLKEM_Q))
-)
+    __contract__(
+        requires(memory_no_alias(r, sizeof(mlk_poly)))
+            assigns(memory_slice(r, sizeof(mlk_poly)))
+                ensures(array_bound(r->coeffs, 0, MLKEM_N, 0, MLKEM_Q)))
 {
   unsigned i;
 
   for (i = 0; i < MLKEM_N; i++)
-  __loop__(
-    invariant(i <= MLKEM_N)
-    invariant(array_bound(r->coeffs, 0, i, 0, MLKEM_Q))
-    decreases(MLKEM_N - i))
-  {
-    /* Barrett reduction, giving signed canonical representative */
-    int16_t t = mlk_barrett_reduce(r->coeffs[i]);
-    /* Conditional addition to get unsigned canonical representative */
-    r->coeffs[i] = mlk_scalar_signed_to_unsigned_q(t);
-  }
+    __loop__(
+        invariant(i <= MLKEM_N)
+            invariant(array_bound(r->coeffs, 0, i, 0, MLKEM_Q))
+                decreases(MLKEM_N - i))
+    {
+      /* Barrett reduction, giving signed canonical representative */
+      int16_t t = mlk_barrett_reduce(r->coeffs[i]);
+      /* Conditional addition to get unsigned canonical representative */
+      r->coeffs[i] = mlk_scalar_signed_to_unsigned_q(t);
+    }
 
   mlk_assert_bound(r, MLKEM_N, 0, MLKEM_Q);
 }
@@ -238,15 +233,15 @@ void mlk_poly_add(mlk_poly *r, const mlk_poly *b)
 {
   unsigned i;
   for (i = 0; i < MLKEM_N; i++)
-  __loop__(
-    invariant(i <= MLKEM_N)
-    invariant(forall(k0, i, MLKEM_N, r->coeffs[k0] == loop_entry(*r).coeffs[k0]))
-    invariant(forall(k1, 0, i, r->coeffs[k1] == loop_entry(*r).coeffs[k1] + b->coeffs[k1]))
-    decreases(MLKEM_N - i))
-  {
-    /* The preconditions imply that the addition stays within int16_t. */
-    r->coeffs[i] = (int16_t)(r->coeffs[i] + b->coeffs[i]);
-  }
+    __loop__(
+        invariant(i <= MLKEM_N)
+            invariant(forall(k0, i, MLKEM_N, r->coeffs[k0] == loop_entry(*r).coeffs[k0]))
+                invariant(forall(k1, 0, i, r->coeffs[k1] == loop_entry(*r).coeffs[k1] + b->coeffs[k1]))
+                    decreases(MLKEM_N - i))
+    {
+      /* The preconditions imply that the addition stays within int16_t. */
+      r->coeffs[i] = (int16_t)(r->coeffs[i] + b->coeffs[i]);
+    }
 }
 
 /* Reference: `poly_sub()` in the reference implementation @[REF].
@@ -257,16 +252,27 @@ void mlk_poly_sub(mlk_poly *r, const mlk_poly *b)
 {
   unsigned i;
   for (i = 0; i < MLKEM_N; i++)
-  __loop__(
-    invariant(i <= MLKEM_N)
-    invariant(forall(k0, i, MLKEM_N, r->coeffs[k0] == loop_entry(*r).coeffs[k0]))
-    invariant(forall(k1, 0, i, r->coeffs[k1] == loop_entry(*r).coeffs[k1] - b->coeffs[k1]))
-    decreases(MLKEM_N - i))
+    __loop__(
+        invariant(i <= MLKEM_N)
+            invariant(forall(k0, i, MLKEM_N, r->coeffs[k0] == loop_entry(*r).coeffs[k0]))
+                invariant(forall(k1, 0, i, r->coeffs[k1] == loop_entry(*r).coeffs[k1] - b->coeffs[k1]))
+                    decreases(MLKEM_N - i))
+    {
+      /* The preconditions imply that the subtraction stays within int16_t. */
+      r->coeffs[i] = (int16_t)(r->coeffs[i] - b->coeffs[i]);
+    }
+}
+
+#if defined(MLK_CONFIG_TEMPO_FLS185)
+MLK_INTERNAL_API
+void mlk_poly_sub_mask(mlk_poly *r, const mlk_poly *a, const mlk_poly *b, int mask)
+{
+  for (int i = 0; i < MLKEM_N; i++)
   {
-    /* The preconditions imply that the subtraction stays within int16_t. */
-    r->coeffs[i] = (int16_t)(r->coeffs[i] - b->coeffs[i]);
+    r->coeffs[i] -= mlk_ct_sel_int16(b->coeffs[i], a->coeffs[i], (uint16_t)mask);
   }
 }
+#endif
 
 #include "zetas.inc"
 
@@ -276,25 +282,24 @@ void mlk_poly_sub(mlk_poly *r, const mlk_poly *b)
  *              from @[NeonNTT] and is used at the C level here. */
 MLK_STATIC_TESTABLE void mlk_poly_mulcache_compute_c(mlk_poly_mulcache *x,
                                                      const mlk_poly *a)
-__contract__(
-  requires(memory_no_alias(x, sizeof(mlk_poly_mulcache)))
-  requires(memory_no_alias(a, sizeof(mlk_poly)))
-  assigns(memory_slice(x, sizeof(mlk_poly_mulcache)))
-)
+    __contract__(
+        requires(memory_no_alias(x, sizeof(mlk_poly_mulcache)))
+            requires(memory_no_alias(a, sizeof(mlk_poly)))
+                assigns(memory_slice(x, sizeof(mlk_poly_mulcache))))
 {
   unsigned i;
   for (i = 0; i < MLKEM_N / 4; i++)
-  __loop__(
-    invariant(i <= MLKEM_N / 4)
-    invariant(array_abs_bound(x->coeffs, 0, 2 * i, MLKEM_Q))
-    decreases(MLKEM_N / 4 - i))
-  {
-    x->coeffs[2 * i + 0] = mlk_fqmul(a->coeffs[4 * i + 1], mlk_zetas[64 + i]);
-    /* The values in zeta table are <= MLKEM_Q in absolute value,
-     * so the negation in int16_t is safe. */
-    x->coeffs[2 * i + 1] =
-        mlk_fqmul(a->coeffs[4 * i + 3], (int16_t)(-mlk_zetas[64 + i]));
-  }
+    __loop__(
+        invariant(i <= MLKEM_N / 4)
+            invariant(array_abs_bound(x->coeffs, 0, 2 * i, MLKEM_Q))
+                decreases(MLKEM_N / 4 - i))
+    {
+      x->coeffs[2 * i + 0] = mlk_fqmul(a->coeffs[4 * i + 1], mlk_zetas[64 + i]);
+      /* The values in zeta table are <= MLKEM_Q in absolute value,
+       * so the negation in int16_t is safe. */
+      x->coeffs[2 * i + 1] =
+          mlk_fqmul(a->coeffs[4 * i + 3], (int16_t)(-mlk_zetas[64 + i]));
+    }
 
   /*
    * This bound is true for the C implementation, but not needed
@@ -351,40 +356,40 @@ void mlk_poly_mulcache_compute(mlk_poly_mulcache *x, const mlk_poly *a)
 static void mlk_ntt_butterfly_block(int16_t r[MLKEM_N], int16_t zeta,
                                     unsigned start, unsigned len,
                                     unsigned bound)
-__contract__(
-  requires(start < MLKEM_N)
-  requires(1 <= len && len <= MLKEM_N / 2 && start + 2 * len <= MLKEM_N)
-  requires(0 <= bound && bound < INT16_MAX - MLKEM_Q)
-  requires(-MLKEM_Q_HALF < zeta && zeta < MLKEM_Q_HALF)
-  requires(memory_no_alias(r, sizeof(int16_t) * MLKEM_N))
-  requires(array_abs_bound(r, 0, start, bound + MLKEM_Q))
-  requires(array_abs_bound(r, start, MLKEM_N, bound))
-  assigns(memory_slice(r, sizeof(int16_t) * MLKEM_N))
-  ensures(array_abs_bound(r, 0, start + 2*len, bound + MLKEM_Q))
-  ensures(array_abs_bound(r, start + 2 * len, MLKEM_N, bound)))
+    __contract__(
+        requires(start < MLKEM_N)
+            requires(1 <= len && len <= MLKEM_N / 2 && start + 2 * len <= MLKEM_N)
+                requires(0 <= bound && bound < INT16_MAX - MLKEM_Q)
+                    requires(-MLKEM_Q_HALF < zeta && zeta < MLKEM_Q_HALF)
+                        requires(memory_no_alias(r, sizeof(int16_t) * MLKEM_N))
+                            requires(array_abs_bound(r, 0, start, bound + MLKEM_Q))
+                                requires(array_abs_bound(r, start, MLKEM_N, bound))
+                                    assigns(memory_slice(r, sizeof(int16_t) * MLKEM_N))
+                                        ensures(array_abs_bound(r, 0, start + 2 * len, bound + MLKEM_Q))
+                                            ensures(array_abs_bound(r, start + 2 * len, MLKEM_N, bound)))
 {
   /* `bound` is a ghost variable only needed in the CBMC specification */
   unsigned j;
   ((void)bound);
   for (j = start; j < start + len; j++)
-  __loop__(
-    invariant(start <= j && j <= start + len)
-    /*
-     * Coefficients are updated in strided pairs, so the bounds for the
-     * intermediate states alternate twice between the old and new bound
-     */
-    invariant(array_abs_bound(r, 0,           j,           bound + MLKEM_Q))
-    invariant(array_abs_bound(r, j,           start + len, bound))
-    invariant(array_abs_bound(r, start + len, j + len,     bound + MLKEM_Q))
-    invariant(array_abs_bound(r, j + len,     MLKEM_N,     bound))
-    decreases(start + len - j))
-  {
-    int16_t t;
-    t = mlk_fqmul(r[j + len], zeta);
-    /* The precondition implies that the arithmetic does not overflow. */
-    r[j + len] = (int16_t)(r[j] - t);
-    r[j] = (int16_t)(r[j] + t);
-  }
+    __loop__(
+        invariant(start <= j && j <= start + len)
+        /*
+         * Coefficients are updated in strided pairs, so the bounds for the
+         * intermediate states alternate twice between the old and new bound
+         */
+        invariant(array_abs_bound(r, 0, j, bound + MLKEM_Q))
+            invariant(array_abs_bound(r, j, start + len, bound))
+                invariant(array_abs_bound(r, start + len, j + len, bound + MLKEM_Q))
+                    invariant(array_abs_bound(r, j + len, MLKEM_N, bound))
+                        decreases(start + len - j))
+    {
+      int16_t t;
+      t = mlk_fqmul(r[j + len], zeta);
+      /* The precondition implies that the arithmetic does not overflow. */
+      r[j + len] = (int16_t)(r[j] - t);
+      r[j] = (int16_t)(r[j] + t);
+    }
 }
 
 /*
@@ -396,28 +401,28 @@ __contract__(
 
 /* Reference: Embedded in `ntt()` in the reference implementation @[REF]. */
 static void mlk_ntt_layer(int16_t r[MLKEM_N], unsigned layer)
-__contract__(
-  requires(memory_no_alias(r, sizeof(int16_t) * MLKEM_N))
-  requires(1 <= layer && layer <= 7)
-  requires(array_abs_bound(r, 0, MLKEM_N, layer * MLKEM_Q))
-  assigns(memory_slice(r, sizeof(int16_t) * MLKEM_N))
-  ensures(array_abs_bound(r, 0, MLKEM_N, (layer + 1) * MLKEM_Q)))
+    __contract__(
+        requires(memory_no_alias(r, sizeof(int16_t) * MLKEM_N))
+            requires(1 <= layer && layer <= 7)
+                requires(array_abs_bound(r, 0, MLKEM_N, layer *MLKEM_Q))
+                    assigns(memory_slice(r, sizeof(int16_t) * MLKEM_N))
+                        ensures(array_abs_bound(r, 0, MLKEM_N, (layer + 1) * MLKEM_Q)))
 {
   unsigned start, k, len;
   /* Twiddle factors for layer n are at indices 2^(n-1)..2^n-1. */
   k = 1u << (layer - 1);
   len = (unsigned)MLKEM_N >> layer;
   for (start = 0; start < MLKEM_N; start += 2 * len)
-  __loop__(
-    invariant(start < MLKEM_N + 2 * len)
-    invariant(k <= MLKEM_N / 2 && 2 * len * k == start + MLKEM_N)
-    invariant(array_abs_bound(r, 0, start, layer * MLKEM_Q + MLKEM_Q))
-    invariant(array_abs_bound(r, start, MLKEM_N, layer * MLKEM_Q))
-    decreases(MLKEM_N - start))
-  {
-    int16_t zeta = mlk_zetas[k++];
-    mlk_ntt_butterfly_block(r, zeta, start, len, layer * MLKEM_Q);
-  }
+    __loop__(
+        invariant(start < MLKEM_N + 2 * len)
+            invariant(k <= MLKEM_N / 2 && 2 * len * k == start + MLKEM_N)
+                invariant(array_abs_bound(r, 0, start, layer * MLKEM_Q + MLKEM_Q))
+                    invariant(array_abs_bound(r, start, MLKEM_N, layer * MLKEM_Q))
+                        decreases(MLKEM_N - start))
+    {
+      int16_t zeta = mlk_zetas[k++];
+      mlk_ntt_butterfly_block(r, zeta, start, len, layer * MLKEM_Q);
+    }
 }
 
 /*
@@ -433,12 +438,11 @@ __contract__(
  * - Iterate over `layer` instead of `len` in the outer loop
  *   to simplify computation of zeta index. */
 MLK_STATIC_TESTABLE void mlk_poly_ntt_c(mlk_poly *p)
-__contract__(
-  requires(memory_no_alias(p, sizeof(mlk_poly)))
-  requires(array_abs_bound(p->coeffs, 0, MLKEM_N, MLKEM_Q))
-  assigns(memory_slice(p, sizeof(mlk_poly)))
-  ensures(array_abs_bound(p->coeffs, 0, MLKEM_N, MLK_NTT_BOUND))
-)
+    __contract__(
+        requires(memory_no_alias(p, sizeof(mlk_poly)))
+            requires(array_abs_bound(p->coeffs, 0, MLKEM_N, MLKEM_Q))
+                assigns(memory_slice(p, sizeof(mlk_poly)))
+                    ensures(array_abs_bound(p->coeffs, 0, MLKEM_N, MLK_NTT_BOUND)))
 {
   unsigned layer;
   int16_t *r;
@@ -448,13 +452,13 @@ __contract__(
   r = p->coeffs;
 
   for (layer = 1; layer <= 7; layer++)
-  __loop__(
-    invariant(1 <= layer && layer <= 8)
-    invariant(array_abs_bound(r, 0, MLKEM_N, layer * MLKEM_Q))
-    decreases(8 - layer))
-  {
-    mlk_ntt_layer(r, layer);
-  }
+    __loop__(
+        invariant(1 <= layer && layer <= 8)
+            invariant(array_abs_bound(r, 0, MLKEM_N, layer * MLKEM_Q))
+                decreases(8 - layer))
+    {
+      mlk_ntt_layer(r, layer);
+    }
 
   /* Check the stronger bound */
   mlk_assert_abs_bound(p, MLKEM_N, MLK_NTT_BOUND);
@@ -477,45 +481,44 @@ void mlk_poly_ntt(mlk_poly *p)
   mlk_poly_ntt_c(p);
 }
 
-
 /* Compute one layer of inverse NTT */
 
 /* Reference: Embedded into `invntt()` in the reference implementation @[REF] */
 static void mlk_invntt_layer(int16_t *r, unsigned layer)
-__contract__(
-  requires(memory_no_alias(r, sizeof(int16_t) * MLKEM_N))
-  requires(1 <= layer && layer <= 7)
-  requires(array_abs_bound(r, 0, MLKEM_N, MLKEM_Q))
-  assigns(memory_slice(r, sizeof(int16_t) * MLKEM_N))
-  ensures(array_abs_bound(r, 0, MLKEM_N, MLKEM_Q)))
+    __contract__(
+        requires(memory_no_alias(r, sizeof(int16_t) * MLKEM_N))
+            requires(1 <= layer && layer <= 7)
+                requires(array_abs_bound(r, 0, MLKEM_N, MLKEM_Q))
+                    assigns(memory_slice(r, sizeof(int16_t) * MLKEM_N))
+                        ensures(array_abs_bound(r, 0, MLKEM_N, MLKEM_Q)))
 {
   unsigned start, k, len;
   len = (unsigned)MLKEM_N >> layer;
   k = (1u << layer) - 1;
   for (start = 0; start < MLKEM_N; start += 2 * len)
-  __loop__(
-    invariant(array_abs_bound(r, 0, MLKEM_N, MLKEM_Q))
-    invariant(start <= MLKEM_N && k <= 127)
-    /* Normalised form of k == MLKEM_N / len - 1 - start / (2 * len) */
-    invariant(2 * len * k + start == 2 * MLKEM_N - 2 * len)
-    decreases(MLKEM_N - start))
-  {
-    unsigned j;
-    int16_t zeta = mlk_zetas[k--];
-    for (j = start; j < start + len; j++)
     __loop__(
-      invariant(start <= j && j <= start + len)
-      invariant(start <= MLKEM_N && k <= 127)
-      invariant(array_abs_bound(r, 0, MLKEM_N, MLKEM_Q))
-      decreases(start + len - j))
+        invariant(array_abs_bound(r, 0, MLKEM_N, MLKEM_Q))
+            invariant(start <= MLKEM_N && k <= 127)
+        /* Normalised form of k == MLKEM_N / len - 1 - start / (2 * len) */
+        invariant(2 * len * k + start == 2 * MLKEM_N - 2 * len)
+            decreases(MLKEM_N - start))
     {
-      int16_t t = r[j];
-      /* The preconditions imply that the arithmetic does not overflow. */
-      r[j] = mlk_barrett_reduce((int16_t)(t + r[j + len]));
-      r[j + len] = (int16_t)(r[j + len] - t);
-      r[j + len] = mlk_fqmul(r[j + len], zeta);
+      unsigned j;
+      int16_t zeta = mlk_zetas[k--];
+      for (j = start; j < start + len; j++)
+        __loop__(
+            invariant(start <= j && j <= start + len)
+                invariant(start <= MLKEM_N && k <= 127)
+                    invariant(array_abs_bound(r, 0, MLKEM_N, MLKEM_Q))
+                        decreases(start + len - j))
+        {
+          int16_t t = r[j];
+          /* The preconditions imply that the arithmetic does not overflow. */
+          r[j] = mlk_barrett_reduce((int16_t)(t + r[j + len]));
+          r[j + len] = (int16_t)(r[j + len] - t);
+          r[j + len] = mlk_fqmul(r[j + len], zeta);
+        }
     }
-  }
 }
 
 /* Reference: `invntt()` in the reference implementation @[REF]
@@ -524,11 +527,10 @@ __contract__(
  *              the end. This allows us to drop a call to `poly_reduce()`
  *              from the base multiplication. */
 MLK_STATIC_TESTABLE void mlk_poly_invntt_tomont_c(mlk_poly *p)
-__contract__(
-  requires(memory_no_alias(p, sizeof(mlk_poly)))
-  assigns(memory_slice(p, sizeof(mlk_poly)))
-  ensures(array_abs_bound(p->coeffs, 0, MLKEM_N, MLK_INVNTT_BOUND))
-)
+    __contract__(
+        requires(memory_no_alias(p, sizeof(mlk_poly)))
+            assigns(memory_slice(p, sizeof(mlk_poly)))
+                ensures(array_abs_bound(p->coeffs, 0, MLKEM_N, MLK_INVNTT_BOUND)))
 {
   unsigned j, layer;
   const int16_t f = 1441; /* check-magic: 1441 == pow(2,32 - 7,MLKEM_Q) */
@@ -540,23 +542,23 @@ __contract__(
    * absolute value < MLKEM_Q.
    */
   for (j = 0; j < MLKEM_N; j++)
-  __loop__(
-    invariant(j <= MLKEM_N)
-    invariant(array_abs_bound(r, 0, j, MLKEM_Q))
-    decreases(MLKEM_N - j))
-  {
-    r[j] = mlk_fqmul(r[j], f);
-  }
+    __loop__(
+        invariant(j <= MLKEM_N)
+            invariant(array_abs_bound(r, 0, j, MLKEM_Q))
+                decreases(MLKEM_N - j))
+    {
+      r[j] = mlk_fqmul(r[j], f);
+    }
 
   /* Run the invNTT layers */
   for (layer = 7; layer > 0; layer--)
-  __loop__(
-    invariant(0 <= layer && layer < 8)
-    invariant(array_abs_bound(r, 0, MLKEM_N, MLKEM_Q))
-    decreases(layer))
-  {
-    mlk_invntt_layer(r, layer);
-  }
+    __loop__(
+        invariant(0 <= layer && layer < 8)
+            invariant(array_abs_bound(r, 0, MLKEM_N, MLKEM_Q))
+                decreases(layer))
+    {
+      mlk_invntt_layer(r, layer);
+    }
 
   mlk_assert_abs_bound(p, MLKEM_N, MLK_INVNTT_BOUND);
 }

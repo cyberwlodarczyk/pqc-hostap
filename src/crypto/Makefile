@@ -29,6 +29,7 @@ LIB_OBJS= \
 	md5-internal.o \
 	milenage.o \
 	ms_funcs.o \
+	pqc.o \
 	rc4.o \
 	sha1.o \
 	sha1-internal.o \
