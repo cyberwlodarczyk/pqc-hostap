@@ -179,10 +179,11 @@ static int h_2(
 #define h_tag MLK_ADD_PARAM_SET(h_tag)
 static int h_tag(
     uint8_t *tag,
+    bool is_initiator,
     const uint8_t *ctr,
     const uint8_t *pk,
-    const uint8_t *own_msg,
-    const uint8_t *peer_msg,
+    const uint8_t *req,
+    const uint8_t *res,
     const uint8_t *ss,
     const uint8_t *sid,
     const uint8_t *pwd)
@@ -191,8 +192,8 @@ static int h_tag(
                          TEMPO_LEN_SID +
                          TEMPO_LEN_PWD +
                          MLKEM_INDCCA_LEN_PUBLIC_KEY +
-                         TEMPO_LEN_MSG +
-                         TEMPO_LEN_MSG +
+                         TEMPO_LEN_REQ +
+                         TEMPO_LEN_RES +
                          MLKEM_SSBYTES;
     uint8_t input[inlen];
     size_t i = 0;
@@ -200,9 +201,18 @@ static int h_tag(
     memcpy(input + (i += 2), sid, TEMPO_LEN_SID);
     memcpy(input + (i += TEMPO_LEN_SID), pwd, TEMPO_LEN_PWD);
     memcpy(input + (i += TEMPO_LEN_PWD), pk, MLKEM_INDCCA_LEN_PUBLIC_KEY);
-    memcpy(input + (i += MLKEM_INDCCA_LEN_PUBLIC_KEY), own_msg, TEMPO_LEN_MSG);
-    memcpy(input + (i += TEMPO_LEN_MSG), peer_msg, TEMPO_LEN_MSG);
-    memcpy(input + (i += TEMPO_LEN_MSG), ss, MLKEM_SSBYTES);
+    if (is_initiator)
+    {
+        memcpy(input + (i += MLKEM_INDCCA_LEN_PUBLIC_KEY), req, TEMPO_LEN_REQ);
+        memcpy(input + (i += TEMPO_LEN_REQ), res, TEMPO_LEN_RES);
+        memcpy(input + (i += TEMPO_LEN_RES), ss, MLKEM_SSBYTES);
+    }
+    else
+    {
+        memcpy(input + (i += MLKEM_INDCCA_LEN_PUBLIC_KEY), res, TEMPO_LEN_RES);
+        memcpy(input + (i += TEMPO_LEN_RES), req, TEMPO_LEN_REQ);
+        memcpy(input + (i += TEMPO_LEN_REQ), ss, MLKEM_SSBYTES);
+    }
     mlk_shake256(tag, TEMPO_LEN_TAG, input, inlen);
     mlk_zeroize(input, inlen);
     return 0;
@@ -211,6 +221,7 @@ static int h_tag(
 #define h_key MLK_ADD_PARAM_SET(h_key)
 static int h_key(
     uint8_t *mk,
+    uint8_t *mkid,
     const uint8_t *pk,
     const uint8_t *req,
     const uint8_t *res,
@@ -222,23 +233,29 @@ static int h_key(
     const size_t inlen = TEMPO_LEN_SID +
                          TEMPO_LEN_PWD +
                          MLKEM_INDCCA_LEN_PUBLIC_KEY +
-                         TEMPO_LEN_MSG +
-                         TEMPO_LEN_MSG +
+                         TEMPO_LEN_REQ +
+                         TEMPO_LEN_RES +
                          MLKEM_SSBYTES;
     uint8_t input[inlen];
+    uint8_t output[48];
     size_t i = 0;
     memcpy(input, sid, TEMPO_LEN_SID);
     memcpy(input + (i += TEMPO_LEN_SID), pwd, TEMPO_LEN_PWD);
     memcpy(input + (i += TEMPO_LEN_PWD), pk, MLKEM_INDCCA_LEN_PUBLIC_KEY);
-    memcpy(input + (i += MLKEM_INDCCA_LEN_PUBLIC_KEY), req, TEMPO_LEN_MSG);
-    memcpy(input + (i += TEMPO_LEN_MSG), res, TEMPO_LEN_MSG);
-    memcpy(input + (i += TEMPO_LEN_MSG), ss, MLKEM_SSBYTES);
+    memcpy(input + (i += MLKEM_INDCCA_LEN_PUBLIC_KEY), req, TEMPO_LEN_REQ);
+    memcpy(input + (i += TEMPO_LEN_REQ), res, TEMPO_LEN_RES);
+    memcpy(input + (i += TEMPO_LEN_RES), ss, MLKEM_SSBYTES);
     const uint8_t *inptr = input;
-    if (sha256_vector(1, &inptr, &inlen, mk) != 0)
+    if (sha384_vector(1, &inptr, &inlen, output) != 0)
     {
         ret = MLK_ERR_DIGEST_FAIL;
+        goto cleanup;
     }
+    memcpy(mk, output, 32);
+    memcpy(mkid, output + 32, 16);
+cleanup:
     mlk_zeroize(input, inlen);
+    mlk_zeroize(output, 48);
     return ret;
 }
 
@@ -304,6 +321,12 @@ cleanup:
 }
 
 MLK_EXTERNAL_API
+int mlk_tempo_check_req(const uint8_t *req)
+{
+    return mlk_kem_check_pk(req + TEMPO_3LAMBDA);
+}
+
+MLK_EXTERNAL_API
 int mlk_tempo_encaps(
     uint8_t *res,
     uint8_t *pk,
@@ -324,11 +347,6 @@ int mlk_tempo_encaps(
     mlk_polyvec rx;
     uint8_t rx_seed[MLKEM_SYMBYTES];
 #endif
-    ret = mlk_kem_check_pk(apk_v);
-    if (ret != 0)
-    {
-        goto cleanup;
-    }
     ret = h_2(v_hash, sid, pwd, apk_seed, apk_v);
     if (ret != 0)
     {
@@ -359,9 +377,6 @@ int mlk_tempo_encaps(
     mlk_polyvec_reduce(&v);
     mlk_polyvec_tobytes(pk, &v);
     memcpy(pk + MLKEM_POLYVECBYTES, apk_seed, MLKEM_SYMBYTES);
-    mlk_zeroize(
-        res + MLKEM_INDCCA_LEN_CIPHERTEXT,
-        TEMPO_LEN_MSG - MLKEM_INDCCA_LEN_CIPHERTEXT);
     ret = mlk_kem_enc_valid_pk(res, ss, pk);
 cleanup:
     mlk_zeroize(&r, sizeof(r));
@@ -387,31 +402,24 @@ int mlk_tempo_decaps(
 MLK_EXTERNAL_API
 int mlk_tempo_confirm(
     uint8_t *tag,
+    bool is_initiator,
     const uint8_t *ctr,
     const uint8_t *pk,
-    const uint8_t *sk,
     const uint8_t *req,
     const uint8_t *res,
     const uint8_t *ss,
     const uint8_t *sid,
     const uint8_t *pwd)
 {
-    if (sk == NULL)
-    {
-        return h_tag(tag, ctr, pk, res, req, ss, sid, pwd);
-    }
-    else
-    {
-        return h_tag(tag, ctr, pk, req, res, ss, sid, pwd);
-    }
+    return h_tag(tag, is_initiator, ctr, pk, req, res, ss, sid, pwd);
 }
 
 MLK_EXTERNAL_API
 int mlk_tempo_verify(
+    bool is_initiator,
     const uint8_t *peer_tag,
     const uint8_t *peer_ctr,
     const uint8_t *pk,
-    const uint8_t *sk,
     const uint8_t *req,
     const uint8_t *res,
     const uint8_t *ss,
@@ -419,15 +427,7 @@ int mlk_tempo_verify(
     const uint8_t *pwd)
 {
     uint8_t t[TEMPO_LEN_TAG];
-    int ret;
-    if (sk == NULL)
-    {
-        ret = h_tag(t, peer_ctr, pk, req, res, ss, sid, pwd);
-    }
-    else
-    {
-        ret = h_tag(t, peer_ctr, pk, res, req, ss, sid, pwd);
-    }
+    int ret = h_tag(t, !is_initiator, peer_ctr, pk, req, res, ss, sid, pwd);
     if (ret == 0)
     {
         ret = mlk_ct_memcmp(t, peer_tag, TEMPO_LEN_TAG) == 0 ? 1 : 0;
@@ -439,6 +439,7 @@ int mlk_tempo_verify(
 MLK_EXTERNAL_API
 int mlk_tempo_finish(
     uint8_t *mk,
+    uint8_t *mkid,
     const uint8_t *pk,
     const uint8_t *req,
     const uint8_t *res,
@@ -446,7 +447,7 @@ int mlk_tempo_finish(
     const uint8_t *sid,
     const uint8_t *pwd)
 {
-    return h_key(mk, pk, req, res, ss, sid, pwd);
+    return h_key(mk, mkid, pk, req, res, ss, sid, pwd);
 }
 
 #undef h_fls

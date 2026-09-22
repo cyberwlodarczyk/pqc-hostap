@@ -254,6 +254,11 @@ L_CFLAGS += -DCONFIG_ETH_P_OUI
 OBJS += src/ap/eth_p_oui.c
 endif
 
+ifdef CONFIG_PQC
+NEED_PQC=y
+NEED_SHA384=y
+endif
+
 ifdef CONFIG_SAE
 L_CFLAGS += -DCONFIG_SAE
 OBJS += src/common/sae.c
@@ -264,9 +269,6 @@ OBJS += src/common/sae_pk.c
 endif
 NEED_ECC=y
 NEED_DH_GROUPS=y
-ifdef CONFIG_PQC
-NEED_PQC=y
-endif
 NEED_HMAC_SHA256_KDF=y
 NEED_DRAGONFLY=y
 endif

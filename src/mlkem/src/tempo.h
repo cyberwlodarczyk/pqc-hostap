@@ -13,6 +13,11 @@ int mlk_tempo_keygen(
     const uint8_t *sid,
     const uint8_t *pwd);
 
+#define mlk_tempo_check_req MLK_TEMPO_NAMESPACE_K(check_req)
+MLK_EXTERNAL_API
+MLK_MUST_CHECK_RETURN_VALUE
+int mlk_tempo_check_req(const uint8_t *req);
+
 #define mlk_tempo_encaps MLK_TEMPO_NAMESPACE_K(encaps)
 MLK_EXTERNAL_API
 MLK_MUST_CHECK_RETURN_VALUE
@@ -37,9 +42,9 @@ MLK_EXTERNAL_API
 MLK_MUST_CHECK_RETURN_VALUE
 int mlk_tempo_confirm(
     uint8_t *tag,
+    bool is_initiator,
     const uint8_t *ctr,
     const uint8_t *pk,
-    const uint8_t *sk,
     const uint8_t *req,
     const uint8_t *res,
     const uint8_t *ss,
@@ -50,10 +55,10 @@ int mlk_tempo_confirm(
 MLK_EXTERNAL_API
 MLK_MUST_CHECK_RETURN_VALUE
 int mlk_tempo_verify(
+    bool is_initiator,
     const uint8_t *peer_tag,
     const uint8_t *peer_ctr,
     const uint8_t *pk,
-    const uint8_t *sk,
     const uint8_t *req,
     const uint8_t *res,
     const uint8_t *ss,
@@ -65,6 +70,7 @@ MLK_EXTERNAL_API
 MLK_MUST_CHECK_RETURN_VALUE
 int mlk_tempo_finish(
     uint8_t *mk,
+    uint8_t *mkid,
     const uint8_t *pk,
     const uint8_t *req,
     const uint8_t *res,

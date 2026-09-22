@@ -168,6 +168,9 @@ static struct wpabuf * sme_auth_build_sae_commit(struct wpa_supplicant *wpa_s,
 	}
 
 	if (reuse && wpa_s->sme.sae.tmp &&
+#ifdef CONFIG_PQC
+		!wpa_s->sme.sae.tmp->tempo &&
+#endif /* CONFIG_PQC */
 	    ether_addr_equal(addr, wpa_s->sme.sae.tmp->bssid)) {
 		wpa_printf(MSG_DEBUG,
 			   "SAE: Reuse previously generated PWE on a retry with the same AP");
@@ -195,6 +198,10 @@ static struct wpabuf * sme_auth_build_sae_commit(struct wpa_supplicant *wpa_s,
 			rsnxe_capa = rsnxe[2];
 	}
 
+#ifdef CONFIG_PQC
+	if (!wpa_s->sme.sae.tmp->tempo)
+	{
+#endif /* CONFIG_PQC */
 	if (ssid->sae_password_id &&
 	    wpa_s->conf->sae_pwe != SAE_PWE_FORCE_HUNT_AND_PECK)
 		use_pt = 1;
@@ -204,6 +211,9 @@ static struct wpabuf * sme_auth_build_sae_commit(struct wpa_supplicant *wpa_s,
 	if (bss && is_6ghz_freq(bss->freq) &&
 	    wpa_s->conf->sae_pwe != SAE_PWE_FORCE_HUNT_AND_PECK)
 		use_pt = 1;
+#ifdef CONFIG_PQC
+	}
+#endif /* CONFIG_PQC */
 #ifdef CONFIG_SAE_PK
 	if ((rsnxe_capa & BIT(WLAN_RSNX_CAPAB_SAE_PK)) &&
 	    ssid->sae_pk != SAE_PK_MODE_DISABLED &&
@@ -222,6 +232,10 @@ static struct wpabuf * sme_auth_build_sae_commit(struct wpa_supplicant *wpa_s,
 	}
 #endif /* CONFIG_SAE_PK */
 
+#ifdef CONFIG_PQC
+	if (!wpa_s->sme.sae.tmp->tempo)
+	{
+#endif /* CONFIG_PQC */
 	if (use_pt || wpa_s->conf->sae_pwe == SAE_PWE_HASH_TO_ELEMENT ||
 	    wpa_s->conf->sae_pwe == SAE_PWE_BOTH) {
 		use_pt = !!(rsnxe_capa & BIT(WLAN_RSNX_CAPAB_SAE_H2E));
@@ -236,6 +250,9 @@ static struct wpabuf * sme_auth_build_sae_commit(struct wpa_supplicant *wpa_s,
 			goto fail;
 		}
 	}
+#ifdef CONFIG_PQC
+	}
+#endif /* CONFIG_PQC */
 
 	if (use_pt && !ssid->pt)
 		wpa_s_setup_sae_pt(wpa_s->conf, ssid, true);

@@ -9,6 +9,10 @@
 #ifndef SAE_H
 #define SAE_H
 
+#ifdef CONFIG_PQC
+#include "crypto/pqc.h"
+#endif /* CONFIG_PQC */
+
 #define SAE_KCK_LEN 32
 #define SAE_PMK_LEN 32
 #define SAE_PMK_LEN_MAX 64
@@ -16,7 +20,11 @@
 #define SAE_MAX_PRIME_LEN 512
 #define SAE_MAX_ECC_PRIME_LEN 66
 #define SAE_MAX_HASH_LEN 64
+#ifdef CONFIG_PQC
+#define SAE_COMMIT_MAX_LEN (2 + PQC_TEMPO_MAX_LEN_REQUEST + 255)
+#else /* CONFIG_PQC */
 #define SAE_COMMIT_MAX_LEN (2 + 3 * SAE_MAX_PRIME_LEN + 255)
+#endif /* CONFIG_PQC */
 #ifdef CONFIG_SAE_PK
 #define SAE_CONFIRM_MAX_LEN ((2 + SAE_MAX_HASH_LEN) + 1500)
 #else /* CONFIG_SAE_PK */
@@ -64,6 +72,12 @@ struct sae_temporary_data {
 	struct wpabuf *own_rejected_groups;
 	struct wpabuf *peer_rejected_groups;
 	unsigned int own_addr_higher:1;
+
+#ifdef CONFIG_PQC
+	pqc_tempo *tempo;
+	u8 *tempo_req;
+	u8 *tempo_res;
+#endif /* CONFIG_PQC */
 
 #ifdef CONFIG_SAE_PK
 	u8 kek[SAE_MAX_HASH_LEN];

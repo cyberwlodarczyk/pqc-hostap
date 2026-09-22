@@ -2,9 +2,16 @@
 #include "crypto/crypto.h"
 #include "mlkem/mlkem.h"
 
+bool pqc_is_group(int group)
+{
+    return group == PQC_GROUP_MLKEM512 ||
+           group == PQC_GROUP_MLKEM768 ||
+           group == PQC_GROUP_MLKEM1024;
+}
+
 pqc_mlkem *pqc_mlkem_init(int group)
 {
-    pqc_mlkem *m = os_malloc(sizeof(pqc_mlkem));
+    pqc_mlkem *m = os_zalloc(sizeof(pqc_mlkem));
     if (m == NULL)
     {
         return NULL;
@@ -33,7 +40,6 @@ pqc_mlkem *pqc_mlkem_init(int group)
         return NULL;
     }
     m->group = group;
-    m->sk = NULL;
     return m;
 }
 
@@ -105,14 +111,9 @@ void pqc_mlkem_deinit(pqc_mlkem *m)
     os_free(m);
 }
 
-pqc_tempo *pqc_tempo_init(
-    int group,
-    const u8 *own_addr,
-    const u8 *peer_addr,
-    const u8 *password,
-    size_t password_len)
+pqc_tempo *pqc_tempo_init(int group)
 {
-    pqc_tempo *t = os_malloc(sizeof(pqc_tempo));
+    pqc_tempo *t = os_zalloc(sizeof(pqc_tempo));
     if (t == NULL)
     {
         return NULL;
@@ -121,24 +122,24 @@ pqc_tempo *pqc_tempo_init(
     {
         t->len_pk = TEMPO512_LEN_PUBLIC_KEY;
         t->len_sk = TEMPO512_LEN_SECRET_KEY;
-        t->len_req = TEMPO512_LEN_MSG;
-        t->len_res = TEMPO512_LEN_MSG;
+        t->len_req = TEMPO512_LEN_REQ;
+        t->len_res = TEMPO512_LEN_RES;
         t->len_tag = TEMPO512_LEN_TAG;
     }
     else if (group == PQC_GROUP_MLKEM768)
     {
         t->len_pk = TEMPO768_LEN_PUBLIC_KEY;
         t->len_sk = TEMPO768_LEN_SECRET_KEY;
-        t->len_req = TEMPO768_LEN_MSG;
-        t->len_res = TEMPO768_LEN_MSG;
+        t->len_req = TEMPO768_LEN_REQ;
+        t->len_res = TEMPO768_LEN_RES;
         t->len_tag = TEMPO768_LEN_TAG;
     }
     else if (group == PQC_GROUP_MLKEM1024)
     {
         t->len_pk = TEMPO1024_LEN_PUBLIC_KEY;
         t->len_sk = TEMPO1024_LEN_SECRET_KEY;
-        t->len_req = TEMPO1024_LEN_MSG;
-        t->len_res = TEMPO1024_LEN_MSG;
+        t->len_req = TEMPO1024_LEN_REQ;
+        t->len_res = TEMPO1024_LEN_RES;
         t->len_tag = TEMPO1024_LEN_TAG;
     }
     else
@@ -146,11 +147,40 @@ pqc_tempo *pqc_tempo_init(
         os_free(t);
         return NULL;
     }
+    t->group = group;
+    return t;
+}
+
+bool pqc_tempo_check_req(const pqc_tempo *t, const u8 *req)
+{
+    int ret;
+    if (t->group == PQC_GROUP_MLKEM512)
+    {
+        ret = tempo512_check_req(req);
+    }
+    else if (t->group == PQC_GROUP_MLKEM768)
+    {
+        ret = tempo768_check_req(req);
+    }
+    else
+    {
+        ret = tempo1024_check_req(req);
+    }
+    return ret == 0;
+}
+
+int pqc_tempo_prepare(
+    pqc_tempo *t,
+    const u8 *own_addr,
+    const u8 *peer_addr,
+    const u8 *password,
+    size_t password_len)
+{
     u8 *sid = os_zalloc(TEMPO_LEN_SID);
     if (sid == NULL)
     {
         os_free(t);
-        return NULL;
+        return -1;
     }
     if (os_memcmp(own_addr, peer_addr, ETH_ALEN) > 0)
     {
@@ -167,28 +197,26 @@ pqc_tempo *pqc_tempo_init(
     {
         os_free(t);
         os_free(sid);
-        return NULL;
+        return -1;
     }
     if (sha256_vector(1, &password, &password_len, pwd) != 0)
     {
         os_free(t);
         os_free(sid);
         os_free(pwd);
-        return NULL;
+        return -1;
     }
-    t->group = group;
     t->sid = sid;
     t->pwd = pwd;
-    t->pk = NULL;
-    t->sk = NULL;
-    t->ss = NULL;
-    t->req = NULL;
-    t->res = NULL;
-    return t;
+    return 0;
 }
 
 int pqc_tempo_keygen(pqc_tempo *t, u8 *req)
 {
+    if (t->sid == NULL || t->pwd == NULL)
+    {
+        return -1;
+    }
     u8 *pk = os_malloc(t->len_pk);
     if (pk == NULL)
     {
@@ -217,24 +245,22 @@ int pqc_tempo_keygen(pqc_tempo *t, u8 *req)
     {
         os_free(pk);
         os_free(sk);
-        return ret;
     }
-    u8 *req_cpy = os_malloc(t->len_req);
-    if (req_cpy == NULL)
+    else
     {
-        bin_clear_free(pk, t->len_pk);
-        bin_clear_free(sk, t->len_sk);
-        return -1;
+        t->is_initiator = true;
+        t->pk = pk;
+        t->sk = sk;
     }
-    os_memcpy(req_cpy, req, t->len_req);
-    t->req = req_cpy;
-    t->pk = pk;
-    t->sk = sk;
-    return 0;
+    return ret;
 }
 
 int pqc_tempo_encaps(pqc_tempo *t, u8 *res, const u8 *req)
 {
+    if (t->sid == NULL || t->pwd == NULL)
+    {
+        return -1;
+    }
     u8 *pk = os_malloc(t->len_pk);
     if (pk == NULL)
     {
@@ -263,31 +289,13 @@ int pqc_tempo_encaps(pqc_tempo *t, u8 *res, const u8 *req)
     {
         os_free(pk);
         os_free(ss);
-        return ret;
     }
-    u8 *req_cpy = os_malloc(t->len_req);
-    u8 *res_cpy = os_malloc(t->len_res);
-    if (req_cpy == NULL || res_cpy == NULL)
+    else
     {
-        if (req_cpy != NULL)
-        {
-            os_free(req_cpy);
-        }
-        if (res_cpy != NULL)
-        {
-            os_free(res_cpy);
-        }
-        bin_clear_free(pk, t->len_pk);
-        bin_clear_free(ss, TEMPO_LEN_SHARED_SECRET);
-        return -1;
+        t->pk = pk;
+        t->ss = ss;
     }
-    os_memcpy(req_cpy, req, t->len_req);
-    os_memcpy(res_cpy, res, t->len_res);
-    t->req = req_cpy;
-    t->res = res_cpy;
-    t->pk = pk;
-    t->ss = ss;
-    return 0;
+    return ret;
 }
 
 int pqc_tempo_decaps(pqc_tempo *t, const u8 *res)
@@ -317,23 +325,22 @@ int pqc_tempo_decaps(pqc_tempo *t, const u8 *res)
     if (ret != 0)
     {
         os_free(ss);
-        return ret;
     }
-    u8 *res_cpy = os_malloc(t->len_res);
-    if (res_cpy == NULL)
+    else
     {
-        bin_clear_free(ss, TEMPO_LEN_SHARED_SECRET);
-        return -1;
+        t->ss = ss;
     }
-    os_memcpy(res_cpy, res, t->len_res);
-    t->res = res_cpy;
-    t->ss = ss;
-    return 0;
+    return ret;
 }
 
-int pqc_tempo_confirm(const pqc_tempo *t, u8 *tag, const u8 *ctr)
+int pqc_tempo_confirm(
+    const pqc_tempo *t,
+    u8 *tag,
+    const u8 *ctr,
+    const u8 *req,
+    const u8 *res)
 {
-    if (t->pk == NULL || t->req == NULL || t->res == NULL || t->ss == NULL)
+    if (t->sid == NULL || t->pwd == NULL || t->pk == NULL || t->ss == NULL)
     {
         return -1;
     }
@@ -341,11 +348,11 @@ int pqc_tempo_confirm(const pqc_tempo *t, u8 *tag, const u8 *ctr)
     {
         return tempo512_confirm(
             tag,
+            t->is_initiator,
             ctr,
             t->pk,
-            t->sk,
-            t->req,
-            t->res,
+            req,
+            res,
             t->ss,
             t->sid,
             t->pwd);
@@ -354,22 +361,22 @@ int pqc_tempo_confirm(const pqc_tempo *t, u8 *tag, const u8 *ctr)
     {
         return tempo768_confirm(
             tag,
+            t->is_initiator,
             ctr,
             t->pk,
-            t->sk,
-            t->req,
-            t->res,
+            req,
+            res,
             t->ss,
             t->sid,
             t->pwd);
     }
     return tempo1024_confirm(
         tag,
+        t->is_initiator,
         ctr,
         t->pk,
-        t->sk,
-        t->req,
-        t->res,
+        req,
+        res,
         t->ss,
         t->sid,
         t->pwd);
@@ -378,21 +385,23 @@ int pqc_tempo_confirm(const pqc_tempo *t, u8 *tag, const u8 *ctr)
 int pqc_tempo_verify(
     const pqc_tempo *t,
     const u8 *peer_tag,
-    const u8 *peer_ctr)
+    const u8 *peer_ctr,
+    const u8 *req,
+    const u8 *res)
 {
-    if (t->pk == NULL || t->req == NULL || t->res == NULL || t->ss == NULL)
+    if (t->sid == NULL || t->pwd == NULL || t->pk == NULL || t->ss == NULL)
     {
         return -1;
     }
     if (t->group == PQC_GROUP_MLKEM512)
     {
         return tempo512_verify(
+            t->is_initiator,
             peer_tag,
             peer_ctr,
             t->pk,
-            t->sk,
-            t->req,
-            t->res,
+            req,
+            res,
             t->ss,
             t->sid,
             t->pwd);
@@ -400,31 +409,36 @@ int pqc_tempo_verify(
     if (t->group == PQC_GROUP_MLKEM768)
     {
         return tempo768_verify(
+            t->is_initiator,
             peer_tag,
             peer_ctr,
             t->pk,
-            t->sk,
-            t->req,
-            t->res,
+            req,
+            res,
             t->ss,
             t->sid,
             t->pwd);
     }
     return tempo1024_verify(
+        t->is_initiator,
         peer_tag,
         peer_ctr,
         t->pk,
-        t->sk,
-        t->req,
-        t->res,
+        req,
+        res,
         t->ss,
         t->sid,
         t->pwd);
 }
 
-int pqc_tempo_finish(const pqc_tempo *t, u8 *mk)
+int pqc_tempo_finish(
+    const pqc_tempo *t,
+    u8 *mk,
+    u8 *mkid,
+    const u8 *req,
+    const u8 *res)
 {
-    if (t->pk == NULL || t->req == NULL || t->res == NULL || t->ss == NULL)
+    if (t->sid == NULL || t->pwd == NULL || t->pk == NULL || t->ss == NULL)
     {
         return -1;
     }
@@ -432,9 +446,10 @@ int pqc_tempo_finish(const pqc_tempo *t, u8 *mk)
     {
         return tempo512_finish(
             mk,
+            mkid,
             t->pk,
-            t->req,
-            t->res,
+            req,
+            res,
             t->ss,
             t->sid,
             t->pwd);
@@ -443,27 +458,27 @@ int pqc_tempo_finish(const pqc_tempo *t, u8 *mk)
     {
         return tempo768_finish(
             mk,
+            mkid,
             t->pk,
-            t->req,
-            t->res,
+            req,
+            res,
             t->ss,
             t->sid,
             t->pwd);
     }
-    return tempo1024_finish(
-        mk,
-        t->pk,
-        t->req,
-        t->res,
-        t->ss,
-        t->sid,
-        t->pwd);
+    return tempo1024_finish(mk, mkid, t->pk, req, res, t->ss, t->sid, t->pwd);
 }
 
 void pqc_tempo_deinit(pqc_tempo *t)
 {
-    os_free(t->sid);
-    bin_clear_free(t->pwd, TEMPO_LEN_PWD);
+    if (t->sid != NULL)
+    {
+        os_free(t->sid);
+    }
+    if (t->pwd != NULL)
+    {
+        bin_clear_free(t->pwd, TEMPO_LEN_PWD);
+    }
     if (t->pk != NULL)
     {
         bin_clear_free(t->pk, t->len_pk);
@@ -475,14 +490,6 @@ void pqc_tempo_deinit(pqc_tempo *t)
     if (t->ss != NULL)
     {
         bin_clear_free(t->ss, TEMPO_LEN_SHARED_SECRET);
-    }
-    if (t->req != NULL)
-    {
-        bin_clear_free(t->req, t->len_req);
-    }
-    if (t->res != NULL)
-    {
-        bin_clear_free(t->res, t->len_res);
     }
     os_free(t);
 }

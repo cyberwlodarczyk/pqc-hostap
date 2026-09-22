@@ -18,6 +18,9 @@
 #include "crypto/sha512.h"
 #include "crypto/random.h"
 #include "crypto/dh_groups.h"
+#ifdef CONFIG_PQC
+#include "crypto/pqc.h"
+#endif /* CONFIG_PQC */
 #include "ieee802_11_defs.h"
 #include "dragonfly.h"
 #include "sae.h"
@@ -30,7 +33,13 @@ int sae_set_group(struct sae_data *sae, int group)
 #ifdef CONFIG_TESTING_OPTIONS
 	/* Allow all groups for testing purposes in non-production builds. */
 #else /* CONFIG_TESTING_OPTIONS */
+#ifdef CONFIG_PQC
+	bool is_pqc = pqc_is_group(group);
+	if (!dragonfly_suitable_group(group, 0) && !is_pqc)
+	{
+#else /* CONFIG_PQC */
 	if (!dragonfly_suitable_group(group, 0)) {
+#endif /* CONFIG_PQC */
 		wpa_printf(MSG_DEBUG, "SAE: Reject unsuitable group %d", group);
 		return -1;
 	}
@@ -86,6 +95,20 @@ int sae_set_group(struct sae_data *sae, int group)
 		return 0;
 	}
 
+#ifdef CONFIG_PQC
+	if (is_pqc)
+	{
+		sae->group = group;
+		tmp->tempo = pqc_tempo_init(group);
+		if (tmp->tempo == NULL)
+		{
+			sae_clear_data(sae);
+			return -1;
+		}
+		return 0;
+	}
+#endif /* CONFIG_PQC */
+
 	/* Unsupported group */
 	wpa_printf(MSG_DEBUG,
 		   "SAE: Group %d not supported by the crypto library", group);
@@ -110,6 +133,20 @@ void sae_clear_temp_data(struct sae_data *sae)
 	crypto_ec_point_deinit(tmp->pwe_ecc, 1);
 	crypto_ec_point_deinit(tmp->own_commit_element_ecc, 0);
 	crypto_ec_point_deinit(tmp->peer_commit_element_ecc, 0);
+#ifdef CONFIG_PQC
+	if (tmp->tempo != NULL)
+	{
+		pqc_tempo_deinit(tmp->tempo);
+	}
+	if (tmp->tempo_req != NULL)
+	{
+		os_free(tmp->tempo_req);
+	}
+	if (tmp->tempo_res != NULL)
+	{
+		os_free(tmp->tempo_res);
+	}
+#endif /* CONFIG_PQC */
 	wpabuf_free(tmp->anti_clogging_token);
 	wpabuf_free(tmp->own_rejected_groups);
 	wpabuf_free(tmp->peer_rejected_groups);
@@ -1104,6 +1141,13 @@ struct sae_pt * sae_derive_pt(int *groups, const u8 *ssid, size_t ssid_len,
 	if (!groups)
 		groups = default_groups;
 	for (i = 0; groups[i] > 0; i++) {
+#ifdef CONFIG_PQC
+		if (pqc_is_group(groups[i]))
+		{
+			continue;
+		}
+#endif /* CONFIG_PQC */
+
 		tmp = sae_derive_pt_group(groups[i], ssid, ssid_len, password,
 					  password_len, identifier);
 		if (!tmp)
@@ -1355,8 +1399,60 @@ int sae_prepare_commit(const u8 *addr1, const u8 *addr2,
 						password_len) < 0))
 		return -1;
 
+#ifdef CONFIG_PQC
+	if (sae->tmp->tempo != NULL)
+	{
+		if (pqc_tempo_prepare(
+			sae->tmp->tempo,
+			addr1,
+			addr2,
+			password,
+			password_len) != 0)
+		{
+			return -1;
+		}
+		if (sae->tmp->tempo_req == NULL)
+		{
+			u8 *req = os_malloc(sae->tmp->tempo->len_req);
+			if (req == NULL)
+			{
+				return -1;
+			}
+			if (pqc_tempo_keygen(sae->tmp->tempo, req) != 0)
+			{
+				os_free(req);
+				return -1;
+			}
+			sae->tmp->tempo_req = req;
+		}
+		else
+		{
+			u8 *res = os_malloc(sae->tmp->tempo->len_res);
+			if (res == NULL)
+			{
+				return -1;
+			}
+			if (pqc_tempo_encaps(
+				sae->tmp->tempo,
+				res,
+				sae->tmp->tempo_req) != 0)
+			{
+				os_free(res);
+				return -1;
+			}
+			sae->tmp->tempo_res = res;
+		}
+	}
+#endif /* CONFIG_PQC */
+
 	sae->h2e = 0;
 	sae->pk = 0;
+#ifdef CONFIG_PQC
+	if (sae->tmp->tempo != NULL)
+	{
+		return 0;
+	}
+#endif /* CONFIG_PQC */
 	return sae_derive_commit(sae);
 }
 
@@ -1664,8 +1760,28 @@ int sae_process_commit(struct sae_data *sae)
 	if (sae->tmp == NULL ||
 	    (sae->tmp->ec && sae_derive_k_ecc(sae, k) < 0) ||
 	    (sae->tmp->dh && sae_derive_k_ffc(sae, k) < 0) ||
-	    sae_derive_keys(sae, k) < 0)
+	    ((sae->tmp->ec || sae->tmp->dh) && sae_derive_keys(sae, k) < 0))
 		return -1;
+#ifdef CONFIG_PQC
+	if (sae->tmp->tempo != NULL)
+	{
+		if (sae->tmp->tempo->is_initiator &&
+			pqc_tempo_decaps(sae->tmp->tempo, sae->tmp->tempo_res) != 0)
+		{
+			return -1;
+		}
+		if (pqc_tempo_finish(
+			sae->tmp->tempo,
+			sae->pmk,
+			sae->pmkid,
+			sae->tmp->tempo_req,
+			sae->tmp->tempo_res) != 0)
+		{
+			return -1;
+		}
+		sae->pmk_len = PQC_TEMPO_LEN_MASTER_KEY;
+	}
+#endif /* CONFIG_PQC */
 	return 0;
 }
 
@@ -1684,6 +1800,10 @@ int sae_write_commit(struct sae_data *sae, struct wpabuf *buf,
 		wpa_hexdump(MSG_DEBUG, "SAE: Anti-clogging token",
 			    wpabuf_head(token), wpabuf_len(token));
 	}
+#ifdef CONFIG_PQC
+	if (sae->tmp->ec || sae->tmp->dh)
+    {
+#endif /* CONFIG_PQC */
 	pos = wpabuf_put(buf, sae->tmp->prime_len);
 	if (crypto_bignum_to_bin(sae->tmp->own_commit_scalar, pos,
 				 sae->tmp->prime_len, sae->tmp->prime_len) < 0)
@@ -1709,6 +1829,22 @@ int sae_write_commit(struct sae_data *sae, struct wpabuf *buf,
 		wpa_hexdump(MSG_DEBUG, "SAE: own commit-element",
 			    pos, sae->tmp->prime_len);
 	}
+#ifdef CONFIG_PQC
+	}
+	else
+	{
+		if (sae->tmp->tempo->is_initiator)
+		{
+			pos = wpabuf_put(buf, sae->tmp->tempo->len_req);
+			os_memcpy(pos, sae->tmp->tempo_req, sae->tmp->tempo->len_req);
+		}
+		else
+		{
+			pos = wpabuf_put(buf, sae->tmp->tempo->len_res);
+			os_memcpy(pos, sae->tmp->tempo_res, sae->tmp->tempo->len_res);
+		}
+	}
+#endif /* CONFIG_PQC */
 
 	if (identifier) {
 		/* Password Identifier element */
@@ -1852,6 +1988,19 @@ static void sae_parse_commit_token(struct sae_data *sae, const u8 **pos,
 		return; /* No Anti-Clogging Token field outside container IE */
 
 	scalar_elem_len = (sae->tmp->ec ? 3 : 2) * sae->tmp->prime_len;
+#ifdef CONFIG_PQC
+	if (sae->tmp->tempo != NULL)
+	{
+		if (sae->tmp->tempo->is_initiator)
+		{
+			scalar_elem_len = sae->tmp->tempo->len_res;
+		}
+		else
+		{
+			scalar_elem_len = sae->tmp->tempo->len_req;
+		}
+	}
+#endif /* CONFIG_PQC */
 	if (scalar_elem_len >= (size_t) (end - *pos))
 		return; /* No extra data beyond peer scalar and element */
 
@@ -2174,7 +2323,14 @@ u16 sae_parse_commit(struct sae_data *sae, const u8 *data, size_t len,
 	/* Check Finite Cyclic Group */
 	if (end - pos < 2)
 		return WLAN_STATUS_UNSPECIFIED_FAILURE;
-	res = sae_group_allowed(sae, allowed_groups, WPA_GET_LE16(pos));
+	u16 group = WPA_GET_LE16(pos);
+#ifdef CONFIG_PQC
+	if (pqc_is_group(group) && h2e)
+	{
+		return WLAN_STATUS_UNSPECIFIED_FAILURE;
+	}
+#endif /* CONFIG_PQC */
+	res = sae_group_allowed(sae, allowed_groups, group);
 	if (res != WLAN_STATUS_SUCCESS)
 		return res;
 	pos += 2;
@@ -2182,6 +2338,10 @@ u16 sae_parse_commit(struct sae_data *sae, const u8 *data, size_t len,
 	/* Optional Anti-Clogging Token */
 	sae_parse_commit_token(sae, &pos, end, token, token_len, h2e);
 
+#ifdef CONFIG_PQC
+	if (sae->tmp->ec || sae->tmp->dh)
+    {
+#endif /* CONFIG_PQC */
 	/* commit-scalar */
 	res = sae_parse_commit_scalar(sae, &pos, end);
 	if (res != WLAN_STATUS_SUCCESS)
@@ -2191,6 +2351,46 @@ u16 sae_parse_commit(struct sae_data *sae, const u8 *data, size_t len,
 	res = sae_parse_commit_element(sae, &pos, end);
 	if (res != WLAN_STATUS_SUCCESS)
 		return res;
+#ifdef CONFIG_PQC
+	}
+	else
+	{
+		if (sae->tmp->tempo->is_initiator)
+		{
+			if (end - pos < sae->tmp->tempo->len_res)
+			{
+				return WLAN_STATUS_UNSPECIFIED_FAILURE;
+			}
+			u8 *res = os_malloc(sae->tmp->tempo->len_res);
+			if (res == NULL)
+			{
+				return WLAN_STATUS_UNSPECIFIED_FAILURE;
+			}
+			os_memcpy(res, pos, sae->tmp->tempo->len_res);
+			pos += sae->tmp->tempo->len_res;
+			sae->tmp->tempo_res = res;
+		}
+		else
+		{
+			if (end - pos < sae->tmp->tempo->len_req)
+			{
+				return WLAN_STATUS_UNSPECIFIED_FAILURE;
+			}
+			if (!pqc_tempo_check_req(sae->tmp->tempo, pos))
+			{
+				return WLAN_STATUS_UNSPECIFIED_FAILURE;
+			}
+			u8 *req = os_malloc(sae->tmp->tempo->len_req);
+			if (req == NULL)
+			{
+				return WLAN_STATUS_UNSPECIFIED_FAILURE;
+			}
+			os_memcpy(req, pos, sae->tmp->tempo->len_req);
+			pos += sae->tmp->tempo->len_req;
+			sae->tmp->tempo_req = req;
+		}
+	}
+#endif /* CONFIG_PQC */
 
 	if (ie_offset)
 		*ie_offset = pos - data;
@@ -2373,12 +2573,27 @@ int sae_write_confirm(struct sae_data *sae, struct wpabuf *buf)
 					 sae->peer_commit_scalar,
 					 sae->tmp->peer_commit_element_ecc,
 					 wpabuf_put(buf, hash_len));
+#ifdef CONFIG_PQC
+	else if (sae->tmp->dh)
+#else /* CONFIG_PQC */
 	else
+#endif /* CONFIG_PQC */
 		res = sae_cn_confirm_ffc(sae, sc, sae->tmp->own_commit_scalar,
 					 sae->tmp->own_commit_element_ffc,
 					 sae->peer_commit_scalar,
 					 sae->tmp->peer_commit_element_ffc,
 					 wpabuf_put(buf, hash_len));
+#ifdef CONFIG_PQC
+	else
+	{
+		res = pqc_tempo_confirm(
+			sae->tmp->tempo,
+			wpabuf_put(buf, sae->tmp->tempo->len_tag),
+			sc,
+			sae->tmp->tempo_req,
+			sae->tmp->tempo_res);
+	}
+#endif /* CONFIG_PQC */
 	if (res)
 		return res;
 
@@ -2400,6 +2615,10 @@ int sae_check_confirm(struct sae_data *sae, const u8 *data, size_t len,
 	if (!sae->tmp)
 		return -1;
 
+#ifdef CONFIG_PQC
+	if (sae->tmp->ec || sae->tmp->dh)
+    {
+#endif /* CONFIG_PQC */
 	hash_len = sae->tmp->kck_len;
 	if (len < 2 + hash_len) {
 		wpa_printf(MSG_DEBUG, "SAE: Too short confirm message");
@@ -2441,6 +2660,26 @@ int sae_check_confirm(struct sae_data *sae, const u8 *data, size_t len,
 			    verifier, hash_len);
 		return -1;
 	}
+#ifdef CONFIG_PQC
+	}
+	else
+	{
+		hash_len = sae->tmp->tempo->len_tag;
+		if (len < 2 + hash_len)
+		{
+			return -1;
+		}
+		if (pqc_tempo_verify(
+				sae->tmp->tempo,
+				data + 2,
+				data,
+				sae->tmp->tempo_req,
+				sae->tmp->tempo_res) != 1)
+		{
+			return -1;
+		}
+	}
+#endif /* CONFIG_PQC */
 
 #ifdef CONFIG_SAE_PK
 	if (sae_check_confirm_pk(sae, data + 2 + hash_len,

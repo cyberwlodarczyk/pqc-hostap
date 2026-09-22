@@ -13,6 +13,12 @@
 #define PQC_TEMPO_LEN_ADDRESS ETH_ALEN
 #define PQC_TEMPO_LEN_COUNTER 2
 #define PQC_TEMPO_LEN_MASTER_KEY 32
+#define PQC_TEMPO_LEN_MASTER_KEY_ID 16
+#define PQC_TEMPO_MAX_LEN_REQUEST 1664
+#define PQC_TEMPO_MAX_LEN_RESPONSE 1568
+#define PQC_TEMPO_MAX_LEN_TAG 64
+
+bool pqc_is_group(int id);
 
 typedef struct
 {
@@ -36,6 +42,7 @@ void pqc_mlkem_deinit(pqc_mlkem *m);
 typedef struct
 {
     int group;
+    bool is_initiator;
     size_t len_pk;
     size_t len_sk;
     size_t len_req;
@@ -46,12 +53,14 @@ typedef struct
     u8 *pk;
     u8 *sk;
     u8 *ss;
-    u8 *req;
-    u8 *res;
 } pqc_tempo;
 
-pqc_tempo *pqc_tempo_init(
-    int group,
+pqc_tempo *pqc_tempo_init(int group);
+
+bool pqc_tempo_check_req(const pqc_tempo *t, const u8 *req);
+
+int pqc_tempo_prepare(
+    pqc_tempo *t,
     const u8 *own_addr,
     const u8 *peer_addr,
     const u8 *password,
@@ -63,14 +72,26 @@ int pqc_tempo_encaps(pqc_tempo *t, u8 *res, const u8 *req);
 
 int pqc_tempo_decaps(pqc_tempo *t, const u8 *res);
 
-int pqc_tempo_confirm(const pqc_tempo *t, u8 *tag, const u8 *ctr);
+int pqc_tempo_confirm(
+    const pqc_tempo *t,
+    u8 *tag,
+    const u8 *ctr,
+    const u8 *req,
+    const u8 *res);
 
 int pqc_tempo_verify(
     const pqc_tempo *t,
     const u8 *peer_tag,
-    const u8 *peer_ctr);
+    const u8 *peer_ctr,
+    const u8 *req,
+    const u8 *res);
 
-int pqc_tempo_finish(const pqc_tempo *t, u8 *mk);
+int pqc_tempo_finish(
+    const pqc_tempo *t,
+    u8 *mk,
+    u8 *mkid,
+    const u8 *req,
+    const u8 *res);
 
 void pqc_tempo_deinit(pqc_tempo *t);
 

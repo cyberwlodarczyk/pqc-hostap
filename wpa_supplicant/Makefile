@@ -271,6 +271,11 @@ OBJS += mesh_mpm.o
 OBJS += mesh_rsn.o
 endif
 
+ifdef CONFIG_PQC
+NEED_PQC=y
+NEED_SHA384=y
+endif
+
 ifdef CONFIG_SAE
 CFLAGS += -DCONFIG_SAE
 OBJS += ../src/common/sae.o
@@ -281,9 +286,6 @@ OBJS += ../src/common/sae_pk.o
 endif
 NEED_ECC=y
 NEED_DH_GROUPS=y
-ifdef CONFIG_PQC
-NEED_PQC=y
-endif
 NEED_HMAC_SHA256_KDF=y
 NEED_DRAGONFLY=y
 ifdef CONFIG_TESTING_OPTIONS

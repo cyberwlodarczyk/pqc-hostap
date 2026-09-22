@@ -711,6 +711,15 @@ static int auth_sae_send_commit(struct hostapd_data *hapd,
 	int reply_res;
 	u16 status;
 
+#ifdef CONFIG_PQC
+	if (status_code == WLAN_STATUS_SAE_HASH_TO_ELEMENT &&
+		sta->sae->tmp &&
+		sta->sae->tmp->tempo)
+	{
+		return WLAN_STATUS_UNSPECIFIED_FAILURE;
+	}
+#endif /* CONFIG_PQC */
+
 	data = auth_build_sae_commit(hapd, sta, update, status_code);
 	if (!data && sta->sae->tmp && sta->sae->tmp->pw_id)
 		return WLAN_STATUS_UNKNOWN_PASSWORD_IDENTIFIER;
@@ -1003,6 +1012,9 @@ static int sae_sm_step(struct hostapd_data *hapd, struct sta_info *sta,
 		if (auth_transaction == 1) {
 			if (sta->sae->tmp) {
 				sta->sae->h2e =
+#ifdef CONFIG_PQC
+					!sta->sae->tmp->tempo &&
+#endif /* CONFIG_PQC */
 					(status_code ==
 					 WLAN_STATUS_SAE_HASH_TO_ELEMENT ||
 					 status_code == WLAN_STATUS_SAE_PK);

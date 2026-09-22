@@ -80,12 +80,12 @@ int tempo_exchange(int group, const u8 *pwd1, const u8 *pwd2)
     ctr1[1] = 0;
     ctr2[0] = 0xFF;
     ctr2[1] = 0xFF;
-    pqc_tempo *t1 = pqc_tempo_init(group, addr1, addr2, pwd1, 12);
+    pqc_tempo *t1 = pqc_tempo_init(group);
     if (t1 == NULL)
     {
         return -2;
     }
-    pqc_tempo *t2 = pqc_tempo_init(group, addr2, addr1, pwd2, 12);
+    pqc_tempo *t2 = pqc_tempo_init(group);
     if (t2 == NULL)
     {
         pqc_tempo_deinit(t1);
@@ -148,17 +148,48 @@ int tempo_exchange(int group, const u8 *pwd1, const u8 *pwd2)
         os_free(mk1);
         return -2;
     }
+    u8 *mkid1 = os_malloc(PQC_TEMPO_LEN_MASTER_KEY_ID);
+    if (mkid1 == NULL)
+    {
+        pqc_tempo_deinit(t1);
+        pqc_tempo_deinit(t2);
+        os_free(req);
+        os_free(res);
+        os_free(tag1);
+        os_free(tag2);
+        os_free(mk1);
+        os_free(mk2);
+        return -2;
+    }
+    u8 *mkid2 = os_malloc(PQC_TEMPO_LEN_MASTER_KEY_ID);
+    if (mkid2 == NULL)
+    {
+        pqc_tempo_deinit(t1);
+        pqc_tempo_deinit(t2);
+        os_free(req);
+        os_free(res);
+        os_free(tag1);
+        os_free(tag2);
+        os_free(mk1);
+        os_free(mk2);
+        os_free(mkid1);
+        return -2;
+    }
     int ret = 0;
-    if (pqc_tempo_keygen(t1, req) != 0 ||
+    if (pqc_tempo_prepare(t1, addr1, addr2, pwd1, 12) != 0 ||
+        pqc_tempo_prepare(t2, addr2, addr1, pwd2, 12) != 0 ||
+        pqc_tempo_keygen(t1, req) != 0 ||
+        !pqc_tempo_check_req(t2, req) ||
         pqc_tempo_encaps(t2, res, req) != 0 ||
         pqc_tempo_decaps(t1, res) != 0 ||
-        pqc_tempo_confirm(t1, tag1, ctr1) != 0 ||
-        pqc_tempo_confirm(t2, tag2, ctr2) != 0 ||
-        pqc_tempo_verify(t1, tag2, ctr2) != 1 ||
-        pqc_tempo_verify(t2, tag1, ctr1) != 1 ||
-        pqc_tempo_finish(t1, mk1) != 0 ||
-        pqc_tempo_finish(t2, mk2) != 0 ||
-        os_memcmp(mk1, mk2, PQC_TEMPO_LEN_MASTER_KEY) != 0)
+        pqc_tempo_confirm(t1, tag1, ctr1, req, res) != 0 ||
+        pqc_tempo_confirm(t2, tag2, ctr2, req, res) != 0 ||
+        pqc_tempo_verify(t1, tag2, ctr2, req, res) != 1 ||
+        pqc_tempo_verify(t2, tag1, ctr1, req, res) != 1 ||
+        pqc_tempo_finish(t1, mk1, mkid1, req, res) != 0 ||
+        pqc_tempo_finish(t2, mk2, mkid2, req, res) != 0 ||
+        os_memcmp(mk1, mk2, PQC_TEMPO_LEN_MASTER_KEY) != 0 ||
+        os_memcmp(mkid1, mkid2, PQC_TEMPO_LEN_MASTER_KEY_ID) != 0)
     {
         ret = -1;
     }
@@ -170,6 +201,8 @@ int tempo_exchange(int group, const u8 *pwd1, const u8 *pwd2)
     os_free(tag2);
     os_free(mk1);
     os_free(mk2);
+    os_free(mkid1);
+    os_free(mkid2);
     return ret;
 }
 
@@ -213,6 +246,10 @@ int main()
     };
     for (int i = 0; i < 3; i++)
     {
+        if (!pqc_is_group(groups[i]))
+        {
+            return EXIT_FAILURE;
+        }
         for (int j = 0; j < 1000; j++)
         {
             if (mlkem_exchange(groups[i]) != 0)
