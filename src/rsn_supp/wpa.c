@@ -18,6 +18,9 @@
 #include "crypto/sha256.h"
 #include "crypto/sha384.h"
 #include "crypto/sha512.h"
+#ifdef CONFIG_PQC
+#include "crypto/pqc.h"
+#endif /* CONFIG_PQC */
 #include "common/ieee802_11_defs.h"
 #include "common/ieee802_11_common.h"
 #include "common/ocv.h"
@@ -4195,6 +4198,16 @@ void wpa_sm_deinit(struct wpa_sm *sm)
 #endif /* CONFIG_FILS */
 #ifdef CONFIG_OWE
 	crypto_ecdh_deinit(sm->owe_ecdh);
+#ifdef CONFIG_PQC
+	if (sm->owe_mlkem != NULL)
+	{
+		pqc_mlkem_deinit(sm->owe_mlkem);
+	}
+	if (sm->owe_mlkem_pub != NULL)
+	{
+		wpabuf_free(sm->owe_mlkem_pub);
+	}
+#endif
 #endif /* CONFIG_OWE */
 #ifdef CONFIG_DPP2
 	wpabuf_clear_free(sm->dpp_z);
@@ -6445,6 +6458,38 @@ struct wpabuf * owe_build_assoc_req(struct wpa_sm *sm, u16 group)
 	struct wpabuf *ie = NULL, *pub = NULL;
 	size_t prime_len;
 
+#ifdef CONFIG_PQC
+	bool is_pqc = pqc_is_group(group);
+	if (is_pqc)
+	{
+		if (sm->owe_mlkem != NULL)
+		{
+			pqc_mlkem_deinit(sm->owe_mlkem);
+			sm->owe_mlkem = NULL;
+		}
+		pqc_mlkem *mlkem = pqc_mlkem_init(group);
+		if (mlkem == NULL)
+		{
+			return NULL;
+		}
+		pub = wpabuf_alloc(mlkem->len_pk);
+		if (pub == NULL)
+		{
+			pqc_mlkem_deinit(mlkem);
+			return NULL;
+		}
+		if (pqc_mlkem_keygen(mlkem, wpabuf_put(pub, mlkem->len_pk)) != 0)
+		{
+			pqc_mlkem_deinit(mlkem);
+			wpabuf_free(pub);
+			return NULL;
+		}
+		sm->owe_mlkem = mlkem;
+		sm->owe_group = group;
+	}
+	else
+	{
+#endif /* CONFIG_PQC */
 	if (group == 19)
 		prime_len = 32;
 	else if (group == 20)
@@ -6463,16 +6508,42 @@ struct wpabuf * owe_build_assoc_req(struct wpa_sm *sm, u16 group)
 	pub = wpabuf_zeropad(pub, prime_len);
 	if (!pub)
 		goto fail;
+#ifdef CONFIG_PQC
+	}
+#endif /* CONFIG_PQC */
 
-	ie = wpabuf_alloc(5 + wpabuf_len(pub));
+	ie = wpabuf_alloc(6 + wpabuf_len(pub));
 	if (!ie)
 		goto fail;
+#ifdef CONFIG_PQC
+	if (is_pqc)
+	{
+		wpabuf_put_u8(ie, WLAN_EID_JUMBO);
+		wpabuf_put_le16(ie, 1 + 2 + wpabuf_len(pub));
+	}
+	else
+	{
+#endif /* CONFIG_PQC */
 	wpabuf_put_u8(ie, WLAN_EID_EXTENSION);
 	wpabuf_put_u8(ie, 1 + 2 + wpabuf_len(pub));
+#ifdef CONFIG_PQC
+	}
+#endif /* CONFIG_PQC */
 	wpabuf_put_u8(ie, WLAN_EID_EXT_OWE_DH_PARAM);
 	wpabuf_put_le16(ie, group);
 	wpabuf_put_buf(ie, pub);
+#ifdef CONFIG_PQC
+	if (is_pqc)
+	{
+		sm->owe_mlkem_pub = pub;
+	}
+	else
+	{
+#endif /* CONFIG_PQC */
 	wpabuf_free(pub);
+#ifdef CONFIG_PQC
+	}
+#endif /* CONFIG_PQC */
 	wpa_hexdump_buf(MSG_DEBUG, "OWE: Diffie-Hellman Parameter element",
 			ie);
 
@@ -6481,6 +6552,13 @@ fail:
 	wpabuf_free(pub);
 	crypto_ecdh_deinit(sm->owe_ecdh);
 	sm->owe_ecdh = NULL;
+#ifdef CONFIG_PQC
+	if (sm->owe_mlkem != NULL)
+	{
+		pqc_mlkem_deinit(sm->owe_mlkem);
+		sm->owe_mlkem = NULL;
+	}
+#endif /* CONFIG_PQC */
 	return NULL;
 }
 
@@ -6531,6 +6609,34 @@ int owe_process_assoc_resp(struct wpa_sm *sm, const u8 *bssid,
 		return -1;
 	}
 
+#ifdef CONFIG_PQC
+	bool is_pqc = pqc_is_group(group);
+	if (is_pqc)
+	{
+		if (sm->owe_mlkem == NULL ||
+			elems.owe_dh_len - 2 != sm->owe_mlkem->len_ct)
+		{
+			return -1;
+		}
+		secret = wpabuf_alloc(PQC_MLKEM_LEN_SHARED_SECRET);
+		if (secret == NULL)
+		{
+			return -1;
+		}
+		if (pqc_mlkem_decaps(
+			sm->owe_mlkem,
+			wpabuf_put(secret, PQC_MLKEM_LEN_SHARED_SECRET),
+			elems.owe_dh + 2) != 0)
+		{
+			return -1;
+		}
+		prime_len = sm->owe_mlkem->len_pk;
+		pub = sm->owe_mlkem_pub;
+		sm->owe_mlkem_pub = NULL;
+	}
+	else
+	{
+#endif /* CONFIG_PQC */
 	if (!sm->owe_ecdh) {
 		wpa_printf(MSG_INFO, "OWE: No ECDH state available");
 		return -1;
@@ -6562,19 +6668,41 @@ int owe_process_assoc_resp(struct wpa_sm *sm, const u8 *bssid,
 		wpabuf_clear_free(secret);
 		return -1;
 	}
+#ifdef CONFIG_PQC
+	}
+#endif /* CONFIG_PQC */
+
+	bool sec128 = group == 19;
+	bool sec192 = group == 20;
+	bool sec256 = group == 21;
+
+#ifdef CONFIG_PQC
+	if (group == PQC_GROUP_MLKEM512)
+	{
+		sec128 = true;
+	}
+	if (group == PQC_GROUP_MLKEM768)
+	{
+		sec192 = true;
+	}
+	if (group == PQC_GROUP_MLKEM1024)
+	{
+		sec256 = true;
+	}
+#endif /* CONFIG_PQC */
 
 	/* PMKID = Truncate-128(Hash(C | A)) */
 	addr[0] = wpabuf_head(pub);
 	len[0] = wpabuf_len(pub);
 	addr[1] = elems.owe_dh + 2;
 	len[1] = elems.owe_dh_len - 2;
-	if (group == 19) {
+	if (sec128) {
 		res = sha256_vector(2, addr, len, pmkid);
 		hash_len = SHA256_MAC_LEN;
-	} else if (group == 20) {
+	} else if (sec192) {
 		res = sha384_vector(2, addr, len, pmkid);
 		hash_len = SHA384_MAC_LEN;
-	} else if (group == 21) {
+	} else if (sec256) {
 		res = sha512_vector(2, addr, len, pmkid);
 		hash_len = SHA512_MAC_LEN;
 	} else {
@@ -6599,13 +6727,13 @@ int owe_process_assoc_resp(struct wpa_sm *sm, const u8 *bssid,
 	wpabuf_free(pub);
 	wpabuf_put_data(hkey, elems.owe_dh + 2, elems.owe_dh_len - 2); /* A */
 	wpabuf_put_le16(hkey, sm->owe_group); /* group */
-	if (group == 19)
+	if (sec128)
 		res = hmac_sha256(wpabuf_head(hkey), wpabuf_len(hkey),
 				  wpabuf_head(secret), wpabuf_len(secret), prk);
-	else if (group == 20)
+	else if (sec192)
 		res = hmac_sha384(wpabuf_head(hkey), wpabuf_len(hkey),
 				  wpabuf_head(secret), wpabuf_len(secret), prk);
-	else if (group == 21)
+	else if (sec256)
 		res = hmac_sha512(wpabuf_head(hkey), wpabuf_len(hkey),
 				  wpabuf_head(secret), wpabuf_len(secret), prk);
 	wpabuf_clear_free(hkey);
@@ -6617,13 +6745,13 @@ int owe_process_assoc_resp(struct wpa_sm *sm, const u8 *bssid,
 
 	/* PMK = HKDF-expand(prk, "OWE Key Generation", n) */
 
-	if (group == 19)
+	if (sec128)
 		res = hmac_sha256_kdf(prk, hash_len, NULL, (const u8 *) info,
 				      os_strlen(info), sm->pmk, hash_len);
-	else if (group == 20)
+	else if (sec192)
 		res = hmac_sha384_kdf(prk, hash_len, NULL, (const u8 *) info,
 				      os_strlen(info), sm->pmk, hash_len);
-	else if (group == 21)
+	else if (sec256)
 		res = hmac_sha512_kdf(prk, hash_len, NULL, (const u8 *) info,
 				      os_strlen(info), sm->pmk, hash_len);
 	forced_memzero(prk, SHA512_MAC_LEN);
@@ -6638,7 +6766,6 @@ int owe_process_assoc_resp(struct wpa_sm *sm, const u8 *bssid,
 	pmksa_cache_add(sm->pmksa, sm->pmk, sm->pmk_len, pmkid, NULL, 0,
 			bssid, sm->own_addr, sm->network_ctx, sm->key_mgmt,
 			NULL);
-
 	return 0;
 }
 

@@ -3151,7 +3151,18 @@ static int wpa_supplicant_use_own_rsne_params(struct wpa_supplicant *wpa_s,
 	l = data->assoc_info.req_ies_len;
 
 	while (p && l >= 2) {
+#ifdef CONFIG_PQC
+		if (p[0] == WLAN_EID_JUMBO)
+		{
+			len = (p[1] | ((u16)p[2] << 8)) + 3;
+		}
+		else
+		{
+#endif /* CONFIG_PQC */
 		len = p[1] + 2;
+#ifdef CONFIG_PQC
+		}
+#endif /* CONFIG_PQC */
 		if (len > l) {
 			wpa_hexdump(MSG_DEBUG, "Truncated IE in assoc_info",
 				    p, l);
@@ -3449,7 +3460,18 @@ static int wpa_supplicant_event_associnfo(struct wpa_supplicant *wpa_s,
 
 	/* Go through the IEs and make a copy of the WPA/RSN IE, if present. */
 	while (p && l >= 2) {
+#ifdef CONFIG_PQC
+		if (p[0] == WLAN_EID_JUMBO)
+		{
+			len = (p[1] | ((u16)p[2] << 8)) + 3;
+		}
+		else
+		{
+#endif /* CONFIG_PQC */
 		len = p[1] + 2;
+#ifdef CONFIG_PQC
+		}
+#endif /* CONFIG_PQC */
 		if (len > l) {
 			wpa_hexdump(MSG_DEBUG, "Truncated IE in assoc_info",
 				    p, l);
@@ -3589,7 +3611,18 @@ no_pfs:
 
 	/* Go through the IEs and make a copy of the MDIE, if present. */
 	while (p && l >= 2) {
+#ifdef CONFIG_PQC
+		if (p[0] == WLAN_EID_JUMBO)
+		{
+			len = (p[1] | ((u16)p[2] << 8)) + 3;
+		}
+		else
+		{
+#endif /* CONFIG_PQC */
 		len = p[1] + 2;
+#ifdef CONFIG_PQC
+		}
+#endif /* CONFIG_PQC */
 		if (len > l) {
 			wpa_hexdump(MSG_DEBUG, "Truncated IE in assoc_info",
 				    p, l);
@@ -3646,7 +3679,18 @@ no_pfs:
 	 */
 	wpa_found = rsn_found = 0;
 	while (p && l >= 2) {
+#ifdef CONFIG_PQC
+		if (p[0] == WLAN_EID_JUMBO)
+		{
+			len = (p[1] | ((u16)p[2] << 8)) + 3;
+		}
+		else
+		{
+#endif /* CONFIG_PQC */
 		len = p[1] + 2;
+#ifdef CONFIG_PQC
+		}
+#endif /* CONFIG_PQC */
 		if (len > l) {
 			wpa_hexdump(MSG_DEBUG, "Truncated IE in beacon_ies",
 				    p, l);

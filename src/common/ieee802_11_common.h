@@ -159,7 +159,11 @@ struct ieee802_11_elems {
 	u8 key_delivery_len;
 	size_t wrapped_data_len;
 	u8 fils_pk_len;
+#ifdef CONFIG_PQC
+	u16 owe_dh_len;
+#else /* CONFIG_PQC */
 	u8 owe_dh_len;
+#endif /* CONFIG_PQC */
 	u8 power_capab_len;
 	u8 roaming_cons_sel_len;
 	u8 password_id_len;
@@ -311,6 +315,23 @@ enum oper_chan_width op_class_to_ch_width(u8 op_class);
 int chwidth_freq2_to_ch_width(int chwidth, int freq2);
 
 /* element iteration helpers */
+#ifdef CONFIG_PQC
+#define for_each_element(_elem, _data, _datalen)			\
+	for (_elem = (const struct element *) (_data);			\
+	     (const u8 *) (_data) + (_datalen) - (const u8 *) _elem >=	\
+		(int) sizeof(*_elem) &&					\
+	     (const u8 *) (_data) + (_datalen) - (const u8 *) _elem >=	\
+		(int) sizeof(*_elem) + (	\
+			_elem->id == WLAN_EID_JUMBO ?	\
+			(1 + (_elem->datalen | ((size_t)_elem->data[0] << 8))) :	\
+			_elem->datalen	\
+		);	\
+	     _elem = (const struct element *) (_elem->data + (	\
+			_elem->id == WLAN_EID_JUMBO ?	\
+			(1 + (_elem->datalen | ((size_t)_elem->data[0] << 8))) :	\
+			_elem->datalen	\
+		)))
+#else /* CONFIG_PQC */
 #define for_each_element(_elem, _data, _datalen)			\
 	for (_elem = (const struct element *) (_data);			\
 	     (const u8 *) (_data) + (_datalen) - (const u8 *) _elem >=	\
@@ -318,6 +339,7 @@ int chwidth_freq2_to_ch_width(int chwidth, int freq2);
 	     (const u8 *) (_data) + (_datalen) - (const u8 *) _elem >=	\
 		(int) sizeof(*_elem) + _elem->datalen;			\
 	     _elem = (const struct element *) (_elem->data + _elem->datalen))
+#endif /* CONFIG_PQC */
 
 #define for_each_element_id(element, _id, data, datalen)		\
 	for_each_element(element, data, datalen)			\

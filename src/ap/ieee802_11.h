@@ -196,7 +196,11 @@ void ieee802_11_finish_fils_auth(struct hostapd_data *hapd,
 				 struct wpabuf *erp_resp,
 				 const u8 *msk, size_t msk_len);
 u8 * owe_assoc_req_process(struct hostapd_data *hapd, struct sta_info *sta,
+#ifdef CONFIG_PQC
+			   const u8 *owe_dh, u16 owe_dh_len,
+#else /* CONFIG_PQC */
 			   const u8 *owe_dh, u8 owe_dh_len,
+#endif /* CONFIG_PQC */
 			   u8 *owe_buf, size_t owe_buf_len, u16 *status);
 u16 owe_process_rsn_ie(struct hostapd_data *hapd, struct sta_info *sta,
 		       const u8 *rsn_ie, size_t rsn_ie_len,

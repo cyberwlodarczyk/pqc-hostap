@@ -16,6 +16,9 @@
 #include "common/ieee802_11_defs.h"
 #include "common/sae.h"
 #include "crypto/sha384.h"
+#ifdef CONFIG_PQC
+#include "crypto/pqc.h"
+#endif /* CONFIG_PQC */
 #include "pasn/pasn_common.h"
 #include "hostapd.h"
 
@@ -302,6 +305,10 @@ struct sta_info {
 	size_t owe_pmk_len;
 	struct crypto_ecdh *owe_ecdh;
 	u16 owe_group;
+#ifdef CONFIG_PQC
+	pqc_mlkem *owe_mlkem;
+	struct wpabuf *owe_mlkem_pub;
+#endif /* CONFIG_PQC */
 #endif /* CONFIG_OWE */
 
 	u8 *ext_capability;

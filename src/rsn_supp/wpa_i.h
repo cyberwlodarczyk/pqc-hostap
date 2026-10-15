@@ -10,6 +10,9 @@
 #define WPA_I_H
 
 #include "utils/list.h"
+#ifdef CONFIG_PQC
+#include "crypto/pqc.h"
+#endif /* CONFIG_PQC */
 
 struct wpa_tdls_peer;
 struct wpa_eapol_key;
@@ -218,6 +221,10 @@ struct wpa_sm {
 #ifdef CONFIG_OWE
 	struct crypto_ecdh *owe_ecdh;
 	u16 owe_group;
+#ifdef CONFIG_PQC
+	pqc_mlkem *owe_mlkem;
+	struct wpabuf *owe_mlkem_pub;
+#endif /* CONFIG_PQC */
 #endif /* CONFIG_OWE */
 
 #ifdef CONFIG_DPP2

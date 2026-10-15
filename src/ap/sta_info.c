@@ -19,6 +19,9 @@
 #include "p2p/p2p.h"
 #include "fst/fst.h"
 #include "crypto/crypto.h"
+#ifdef CONFIG_PQC
+#include "crypto/pqc.h"
+#endif /* CONFIG_PQC */
 #include "hostapd.h"
 #include "accounting.h"
 #include "ieee802_1x.h"
@@ -446,6 +449,16 @@ void ap_free_sta(struct hostapd_data *hapd, struct sta_info *sta)
 #ifdef CONFIG_OWE
 	bin_clear_free(sta->owe_pmk, sta->owe_pmk_len);
 	crypto_ecdh_deinit(sta->owe_ecdh);
+#ifdef CONFIG_PQC
+	if (sta->owe_mlkem != NULL)
+	{
+		pqc_mlkem_deinit(sta->owe_mlkem);
+	}
+	if (sta->owe_mlkem_pub != NULL)
+	{
+		wpabuf_free(sta->owe_mlkem_pub);
+	}
+#endif /* CONFIG_PQC */
 #endif /* CONFIG_OWE */
 
 #ifdef CONFIG_DPP2

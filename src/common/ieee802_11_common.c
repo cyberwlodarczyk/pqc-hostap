@@ -649,6 +649,14 @@ static ParseRes __ieee802_11_parse_elems(const u8 *start, size_t len,
 						       len, show_errors))
 				unknown++;
 			break;
+#ifdef CONFIG_PQC
+		case WLAN_EID_JUMBO:
+			u16 jelen = elen | ((u16)(*pos++) << 8);
+			if (ieee802_11_parse_extension(pos, jelen, elems, start,
+						       len, show_errors))
+				unknown++;
+			break;
+#endif /* CONFIG_PQC */
 		default:
 			unknown++;
 			if (!show_errors)

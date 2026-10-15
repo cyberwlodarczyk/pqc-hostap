@@ -17,6 +17,9 @@
 #include "crypto/sha384.h"
 #include "crypto/sha512.h"
 #include "crypto/random.h"
+#ifdef CONFIG_PQC
+#include "crypto/pqc.h"
+#endif /* CONFIG_PQC */
 #include "common/ieee802_11_defs.h"
 #include "common/ieee802_11_common.h"
 #include "common/wpa_ctrl.h"
@@ -3603,7 +3606,11 @@ static int owe_group_supported(struct hostapd_data *hapd, u16 group)
 	int i;
 	int *groups = hapd->conf->owe_groups;
 
-	if (group != 19 && group != 20 && group != 21)
+	if (group != 19 && group != 20 && group != 21
+#ifdef CONFIG_PQC
+		&& !pqc_is_group(group)
+#endif /* CONFIG_PQC */
+	)
 		return 0;
 
 	if (!groups)
@@ -3617,10 +3624,13 @@ static int owe_group_supported(struct hostapd_data *hapd, u16 group)
 	return 0;
 }
 
-
 static u16 owe_process_assoc_req(struct hostapd_data *hapd,
 				 struct sta_info *sta, const u8 *owe_dh,
+#ifdef CONFIG_PQC
+				 u16 owe_dh_len)
+#else /* CONFIG_PQC */
 				 u8 owe_dh_len)
+#endif /* CONFIG_PQC */
 {
 	struct wpabuf *secret, *pub, *hkey;
 	int res;
@@ -3641,6 +3651,51 @@ static u16 owe_process_assoc_req(struct hostapd_data *hapd,
 		wpa_printf(MSG_DEBUG, "OWE: Unsupported DH group %u", group);
 		return WLAN_STATUS_FINITE_CYCLIC_GROUP_NOT_SUPPORTED;
 	}
+#ifdef CONFIG_PQC
+	bool is_pqc = pqc_is_group(group);
+	if (is_pqc)
+	{
+		pqc_mlkem *mlkem = pqc_mlkem_init(group);
+		if (mlkem == NULL)
+		{
+			return WLAN_STATUS_UNSPECIFIED_FAILURE;
+		}
+		if (owe_dh_len - 2 != mlkem->len_pk)
+		{
+			pqc_mlkem_deinit(mlkem);
+			return WLAN_STATUS_UNSPECIFIED_FAILURE;
+		}
+		secret = wpabuf_alloc(PQC_MLKEM_LEN_SHARED_SECRET);
+		if (secret == NULL)
+		{
+			pqc_mlkem_deinit(mlkem);
+			return WLAN_STATUS_UNSPECIFIED_FAILURE;
+		}
+		pub = wpabuf_alloc(mlkem->len_ct);
+		if (pub == NULL)
+		{
+			pqc_mlkem_deinit(mlkem);
+			wpabuf_clear_free(secret);
+			return WLAN_STATUS_UNSPECIFIED_FAILURE;
+		}
+		if (pqc_mlkem_encaps(
+			mlkem,
+			wpabuf_put(pub, mlkem->len_ct),
+			wpabuf_put(secret, PQC_MLKEM_LEN_SHARED_SECRET),
+			owe_dh + 2) != 0)
+		{
+			pqc_mlkem_deinit(mlkem);
+			wpabuf_clear_free(secret);
+			wpabuf_free(pub);
+			return WLAN_STATUS_UNSPECIFIED_FAILURE;
+		}
+		prime_len = mlkem->len_ct;
+		sta->owe_mlkem = mlkem;
+		sta->owe_group = group;
+	}
+	else
+	{
+#endif /* CONFIG_PQC */
 	if (group == 19)
 		prime_len = 32;
 	else if (group == 20)
@@ -3685,19 +3740,41 @@ static u16 owe_process_assoc_req(struct hostapd_data *hapd,
 		wpabuf_clear_free(secret);
 		return WLAN_STATUS_UNSPECIFIED_FAILURE;
 	}
+#ifdef CONFIG_PQC
+	}
+#endif /* CONFIG_PQC */
+
+	bool sec128 = group == 19;
+	bool sec192 = group == 20;
+	bool sec256 = group == 21;
+
+#ifdef CONFIG_PQC
+	if (group == PQC_GROUP_MLKEM512)
+	{
+		sec128 = true;
+	}
+	if (group == PQC_GROUP_MLKEM768)
+	{
+		sec192 = true;
+	}
+	if (group == PQC_GROUP_MLKEM1024)
+	{
+		sec256 = true;
+	}
+#endif /* CONFIG_PQC */
 
 	/* PMKID = Truncate-128(Hash(C | A)) */
 	addr[0] = owe_dh + 2;
 	len[0] = owe_dh_len - 2;
 	addr[1] = wpabuf_head(pub);
 	len[1] = wpabuf_len(pub);
-	if (group == 19) {
+	if (sec128) {
 		res = sha256_vector(2, addr, len, pmkid);
 		hash_len = SHA256_MAC_LEN;
-	} else if (group == 20) {
+	} else if (sec192) {
 		res = sha384_vector(2, addr, len, pmkid);
 		hash_len = SHA384_MAC_LEN;
-	} else if (group == 21) {
+	} else if (sec256) {
 		res = sha512_vector(2, addr, len, pmkid);
 		hash_len = SHA512_MAC_LEN;
 	} else {
@@ -3721,15 +3798,26 @@ static u16 owe_process_assoc_req(struct hostapd_data *hapd,
 
 	wpabuf_put_data(hkey, owe_dh + 2, owe_dh_len - 2); /* C */
 	wpabuf_put_buf(hkey, pub); /* A */
+#ifdef CONFIG_PQC
+	if (is_pqc)
+	{
+		sta->owe_mlkem_pub = pub;
+	}
+	else
+	{
+#endif /* CONFIG_PQC */
 	wpabuf_free(pub);
+#ifdef CONFIG_PQC
+	}
+#endif /* CONFIG_PQC */
 	wpabuf_put_le16(hkey, group); /* group */
-	if (group == 19)
+	if (sec128)
 		res = hmac_sha256(wpabuf_head(hkey), wpabuf_len(hkey),
 				  wpabuf_head(secret), wpabuf_len(secret), prk);
-	else if (group == 20)
+	else if (sec192)
 		res = hmac_sha384(wpabuf_head(hkey), wpabuf_len(hkey),
 				  wpabuf_head(secret), wpabuf_len(secret), prk);
-	else if (group == 21)
+	else if (sec256)
 		res = hmac_sha512(wpabuf_head(hkey), wpabuf_len(hkey),
 				  wpabuf_head(secret), wpabuf_len(secret), prk);
 	wpabuf_clear_free(hkey);
@@ -3748,13 +3836,13 @@ static u16 owe_process_assoc_req(struct hostapd_data *hapd,
 		return WLAN_STATUS_UNSPECIFIED_FAILURE;
 	}
 
-	if (group == 19)
+	if (sec128)
 		res = hmac_sha256_kdf(prk, hash_len, NULL, (const u8 *) info,
 				      os_strlen(info), sta->owe_pmk, hash_len);
-	else if (group == 20)
+	else if (sec192)
 		res = hmac_sha384_kdf(prk, hash_len, NULL, (const u8 *) info,
 				      os_strlen(info), sta->owe_pmk, hash_len);
-	else if (group == 21)
+	else if (sec256)
 		res = hmac_sha512_kdf(prk, hash_len, NULL, (const u8 *) info,
 				      os_strlen(info), sta->owe_pmk, hash_len);
 	os_memset(prk, 0, SHA512_MAC_LEN);
@@ -3769,7 +3857,6 @@ static u16 owe_process_assoc_req(struct hostapd_data *hapd,
 	wpa_hexdump(MSG_DEBUG, "OWE: PMKID", pmkid, PMKID_LEN);
 	wpa_auth_pmksa_add2(hapd->wpa_auth, sta->addr, sta->owe_pmk,
 			    sta->owe_pmk_len, pmkid, 0, WPA_KEY_MGMT_OWE, NULL);
-
 	return WLAN_STATUS_SUCCESS;
 }
 
@@ -3865,15 +3952,40 @@ u16 owe_process_rsn_ie(struct hostapd_data *hapd,
 	if (sta->owe_ecdh) {
 		struct wpabuf *pub;
 
+#ifdef CONFIG_PQC
+		if (sta->owe_mlkem_pub != NULL)
+		{
+			pub = sta->owe_mlkem_pub;
+			sta->owe_mlkem_pub = NULL;
+		}
+		else
+		{
+#endif /* CONFIG_PQC */
 		pub = crypto_ecdh_get_pubkey(sta->owe_ecdh, 0);
+#ifdef CONFIG_PQC
+		}
+#endif /* CONFIG_PQC */
 		if (!pub) {
 			status = WLAN_STATUS_UNSPECIFIED_FAILURE;
 			goto end;
 		}
 
 		/* OWE Diffie-Hellman Parameter element */
+#ifdef CONFIG_PQC
+		if (sta->owe_mlkem != NULL)
+		{
+			*owe_buf++ = WLAN_EID_JUMBO; /* Element ID */
+			WPA_PUT_LE16(owe_buf, 1 + 2 + wpabuf_len(pub)); /* Length */
+			owe_buf += 2;
+		}
+		else
+		{
+#endif /* CONFIG_PQC */
 		*owe_buf++ = WLAN_EID_EXTENSION; /* Element ID */
 		*owe_buf++ = 1 + 2 + wpabuf_len(pub); /* Length */
+#ifdef CONFIG_PQC
+		}
+#endif /* CONFIG_PQC */
 		*owe_buf++ = WLAN_EID_EXT_OWE_DH_PARAM; /* Element ID Extension
 							 */
 		WPA_PUT_LE16(owe_buf, sta->owe_group);
@@ -4868,7 +4980,20 @@ static u16 send_assoc_resp(struct hostapd_data *hapd, struct sta_info *sta,
 #endif /* CONFIG_FILS */
 #ifdef CONFIG_OWE
 	if (sta && (hapd->conf->wpa_key_mgmt & WPA_KEY_MGMT_OWE))
+#ifdef CONFIG_PQC
+	{
+		if (sta->owe_mlkem != NULL)
+		{
+			buflen += 1600;
+		}
+		else
+		{
+#endif /* CONFIG_PQC */
 		buflen += 150;
+#ifdef CONFIG_PQC
+		}
+	}
+#endif /* CONFIG_PQC */
 #endif /* CONFIG_OWE */
 #ifdef CONFIG_DPP2
 	if (sta && sta->dpp_pfs)
@@ -5041,19 +5166,49 @@ rsnxe_done:
 
 #ifdef CONFIG_OWE
 	if ((hapd->conf->wpa_key_mgmt & WPA_KEY_MGMT_OWE) &&
+#ifdef CONFIG_PQC
+		sta && (sta->owe_ecdh || sta->owe_mlkem) &&
+		status_code == WLAN_STATUS_SUCCESS &&
+#else /* CONFIG_PQC */
 	    sta && sta->owe_ecdh && status_code == WLAN_STATUS_SUCCESS &&
+#endif /* CONFIG_PQC */
 	    wpa_auth_sta_key_mgmt(sta->wpa_sm) == WPA_KEY_MGMT_OWE &&
 	    !wpa_auth_sta_get_pmksa(sta->wpa_sm)) {
 		struct wpabuf *pub;
 
+#ifdef CONFIG_PQC
+		if (sta->owe_mlkem_pub != NULL)
+		{
+			pub = sta->owe_mlkem_pub;
+			sta->owe_mlkem_pub = NULL;
+		}
+		else
+		{
+#endif /* CONFIG_PQC */
 		pub = crypto_ecdh_get_pubkey(sta->owe_ecdh, 0);
+#ifdef CONFIG_PQC
+		}
+#endif /* CONFIG_PQC */
 		if (!pub) {
 			res = WLAN_STATUS_UNSPECIFIED_FAILURE;
 			goto done;
 		}
 		/* OWE Diffie-Hellman Parameter element */
+#ifdef CONFIG_PQC
+		if (sta->owe_mlkem != NULL)
+		{
+			*p++ = WLAN_EID_JUMBO; /* Element ID */
+			WPA_PUT_LE16(p, 1 + 2 + wpabuf_len(pub)); /* Length */
+			p += 2;
+		}
+		else
+		{
+#endif /* CONFIG_PQC */
 		*p++ = WLAN_EID_EXTENSION; /* Element ID */
 		*p++ = 1 + 2 + wpabuf_len(pub); /* Length */
+#ifdef CONFIG_PQC
+		}
+#endif /* CONFIG_PQC */
 		*p++ = WLAN_EID_EXT_OWE_DH_PARAM; /* Element ID Extension */
 		WPA_PUT_LE16(p, sta->owe_group);
 		p += 2;
@@ -5183,7 +5338,11 @@ done:
 
 #ifdef CONFIG_OWE
 u8 * owe_assoc_req_process(struct hostapd_data *hapd, struct sta_info *sta,
+#ifdef CONFIG_PQC
+			   const u8 *owe_dh, u16 owe_dh_len,
+#else /* CONFIG_PQC */
 			   const u8 *owe_dh, u8 owe_dh_len,
+#endif /* CONFIG_PQC */
 			   u8 *owe_buf, size_t owe_buf_len, u16 *status)
 {
 #ifdef CONFIG_TESTING_OPTIONS
@@ -5219,15 +5378,40 @@ u8 * owe_assoc_req_process(struct hostapd_data *hapd, struct sta_info *sta,
 	if (sta->owe_ecdh && owe_buf) {
 		struct wpabuf *pub;
 
+#ifdef CONFIG_PQC
+		if (sta->owe_mlkem_pub != NULL)
+		{
+			pub = sta->owe_mlkem_pub;
+			sta->owe_mlkem_pub = NULL;
+		}
+		else
+		{
+#endif /* CONFIG_PQC */
 		pub = crypto_ecdh_get_pubkey(sta->owe_ecdh, 0);
+#ifdef CONFIG_PQC
+		}
+#endif /* CONFIG_PQC */
 		if (!pub) {
 			*status = WLAN_STATUS_UNSPECIFIED_FAILURE;
 			return owe_buf;
 		}
 
 		/* OWE Diffie-Hellman Parameter element */
+#ifdef CONFIG_PQC
+		if (sta->owe_mlkem != NULL)
+		{
+			*owe_buf++ = WLAN_EID_JUMBO; /* Element ID */
+			WPA_PUT_LE16(owe_buf, 1 + 2 + wpabuf_len(pub)); /* Length */
+			owe_buf += 2;
+		}
+		else
+		{
+#endif /* CONFIG_PQC */
 		*owe_buf++ = WLAN_EID_EXTENSION; /* Element ID */
 		*owe_buf++ = 1 + 2 + wpabuf_len(pub); /* Length */
+#ifdef CONFIG_PQC
+		}
+#endif /* CONFIG_PQC */
 		*owe_buf++ = WLAN_EID_EXT_OWE_DH_PARAM; /* Element ID Extension
 							 */
 		WPA_PUT_LE16(owe_buf, sta->owe_group);

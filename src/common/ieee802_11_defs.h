@@ -480,6 +480,9 @@
 #define WLAN_EID_DILS 241
 #define WLAN_EID_FRAGMENT 242
 #define WLAN_EID_RSNX 244
+#ifdef CONFIG_PQC
+#define WLAN_EID_JUMBO 254
+#endif /* CONFIG_PQC */
 #define WLAN_EID_EXTENSION 255
 
 /* Element ID Extension (EID 255) values */
