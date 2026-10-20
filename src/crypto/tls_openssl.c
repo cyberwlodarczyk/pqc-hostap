@@ -1171,7 +1171,11 @@ void * tls_init(const struct tls_config *conf)
 		ciphers = conf->openssl_ciphers;
 	else
 		ciphers = TLS_DEFAULT_CIPHERS;
-	if (SSL_CTX_set_cipher_list(ssl, ciphers) != 1) {
+	if (SSL_CTX_set_cipher_list(ssl, ciphers) != 1
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+		|| SSL_CTX_set_ciphersuites(ssl, ciphers) != 1
+#endif /* >= 1.1.1 */
+	) {
 		wpa_printf(MSG_ERROR,
 			   "OpenSSL: Failed to set cipher string '%s'",
 			   ciphers);
@@ -1192,7 +1196,11 @@ void tls_deinit(void *ssl_ctx)
 
 	if (data->tls_session_lifetime > 0) {
 		wpa_printf(MSG_DEBUG, "OpenSSL: Flush sessions");
+#if OPENSSL_VERSION_NUMBER >= 0x30400000L
+		SSL_CTX_flush_sessions_ex(ssl, 0);
+#else /* >= 3.4 */
 		SSL_CTX_flush_sessions(ssl, 0);
+#endif /* >= 3.4 */
 		wpa_printf(MSG_DEBUG, "OpenSSL: Flush sessions - done");
 	}
 	while ((sess_data = dl_list_first(&context->sessions,
@@ -3212,7 +3220,11 @@ static int tls_set_conn_flags(struct tls_connection *conn, unsigned int flags,
 				   openssl_ciphers);
 			ciphers = openssl_ciphers;
 		}
-		if (SSL_set_cipher_list(ssl, ciphers) != 1) {
+		if (SSL_set_cipher_list(ssl, ciphers) != 1
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+			|| SSL_set_ciphersuites(ssl, ciphers) != 1
+#endif /* >= 1.1.1 */
+		) {
 			wpa_printf(MSG_INFO,
 				   "OpenSSL: Failed to set Suite B ciphers");
 			return -1;
@@ -3231,7 +3243,11 @@ static int tls_set_conn_flags(struct tls_connection *conn, unsigned int flags,
 				   openssl_ciphers);
 			ciphers = openssl_ciphers;
 		}
-		if (SSL_set_cipher_list(ssl, ciphers) != 1) {
+		if (SSL_set_cipher_list(ssl, ciphers) != 1
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+			|| SSL_set_ciphersuites(ssl, ciphers) != 1
+#endif /* >= 1.1.1 */
+		) {
 			wpa_printf(MSG_INFO,
 				   "OpenSSL: Failed to set Suite B ciphers");
 			return -1;
@@ -3319,7 +3335,11 @@ static int tls_set_conn_flags(struct tls_connection *conn, unsigned int flags,
 	}
 #else /* OPENSSL_IS_BORINGSSL */
 	if (!(flags & (TLS_CONN_SUITEB | TLS_CONN_SUITEB_NO_ECDH)) &&
-	    openssl_ciphers && SSL_set_cipher_list(ssl, openssl_ciphers) != 1) {
+		openssl_ciphers && (SSL_set_cipher_list(ssl, openssl_ciphers) != 1
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+		|| SSL_set_ciphersuites(ssl, openssl_ciphers) != 1
+#endif /* >= 1.1.1 */
+	)) {
 		wpa_printf(MSG_INFO,
 			   "OpenSSL: Failed to set openssl_ciphers '%s'",
 			   openssl_ciphers);
@@ -3327,7 +3347,11 @@ static int tls_set_conn_flags(struct tls_connection *conn, unsigned int flags,
 	}
 #endif /* OPENSSL_IS_BORINGSSL */
 #else /* CONFIG_SUITEB */
-	if (openssl_ciphers && SSL_set_cipher_list(ssl, openssl_ciphers) != 1) {
+	if (openssl_ciphers && (SSL_set_cipher_list(ssl, openssl_ciphers) != 1
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+		|| SSL_set_ciphersuites(ssl, openssl_ciphers) != 1
+#endif /* >= 1.1.1 */
+	)) {
 		wpa_printf(MSG_INFO,
 			   "OpenSSL: Failed to set openssl_ciphers '%s'",
 			   openssl_ciphers);
@@ -3362,7 +3386,11 @@ static int tls_set_conn_flags(struct tls_connection *conn, unsigned int flags,
 		wpa_printf(MSG_DEBUG,
 			   "OpenSSL: Enable cipher suites for anonymous EAP-TEAP provisioning: %s",
 			   cs);
-		if (SSL_set_cipher_list(conn->ssl, cs) != 1) {
+		if (SSL_set_cipher_list(conn->ssl, cs) != 1
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+			|| SSL_set_ciphersuites(conn->ssl, cs) != 1
+#endif /* >= 1.1.1 */
+		) {
 			tls_show_errors(MSG_INFO, __func__,
 					"Cipher suite configuration failed");
 			return -1;
@@ -4908,7 +4936,11 @@ int tls_connection_set_cipher_list(void *tls_ctx, struct tls_connection *conn,
 #endif /* EAP_FAST_OR_TEAP */
 #endif
 
-	if (SSL_set_cipher_list(conn->ssl, buf + 1) != 1) {
+	if (SSL_set_cipher_list(conn->ssl, buf + 1) != 1
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+		|| SSL_set_ciphersuites(conn->ssl, buf + 1) != 1
+#endif /* >= 1.1.1 */
+	) {
 		tls_show_errors(MSG_INFO, __func__,
 				"Cipher suite configuration failed");
 		return -1;
@@ -5478,7 +5510,11 @@ int tls_connection_set_params(void *tls_ctx, struct tls_connection *conn,
 	}
 #endif /* OPENSSL_IS_BORINGSSL */
 #endif /* CONFIG_SUITEB */
-	if (ciphers && SSL_set_cipher_list(conn->ssl, ciphers) != 1) {
+	if (ciphers && (SSL_set_cipher_list(conn->ssl, ciphers) != 1
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+		|| SSL_set_ciphersuites(conn->ssl, ciphers) != 1
+#endif /* >= 1.1.1 */
+	)) {
 		wpa_printf(MSG_INFO,
 			   "OpenSSL: Failed to set cipher string '%s'",
 			   ciphers);
@@ -5705,7 +5741,11 @@ int tls_global_set_params(void *tls_ctx,
 		data->openssl_ciphers = NULL;
 	}
 	if (params->openssl_ciphers &&
-	    SSL_CTX_set_cipher_list(ssl_ctx, params->openssl_ciphers) != 1) {
+		(SSL_CTX_set_cipher_list(ssl_ctx, params->openssl_ciphers) != 1
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+		|| SSL_CTX_set_ciphersuites(ssl_ctx, params->openssl_ciphers) != 1
+#endif /* >= 1.1.1 */
+	)) {
 		wpa_printf(MSG_INFO,
 			   "OpenSSL: Failed to set cipher string '%s'",
 			   params->openssl_ciphers);
