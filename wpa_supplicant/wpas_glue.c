@@ -1203,6 +1203,9 @@ int wpa_supplicant_init_eapol(struct wpa_supplicant *wpa_s)
 	ctx->pkcs11_module_path = wpa_s->conf->pkcs11_module_path;
 #endif /* CONFIG_PKCS11_MODULE_PATH */
 	ctx->openssl_ciphers = wpa_s->conf->openssl_ciphers;
+	ctx->tls13_ciphers = wpa_s->conf->tls13_ciphers;
+	ctx->tls_groups = wpa_s->conf->tls_groups;
+	ctx->tls_sigalgs = wpa_s->conf->tls_sigalgs;
 	ctx->wps = wpa_s->wps;
 	ctx->eap_param_needed = wpa_supplicant_eap_param_needed;
 #ifdef CONFIG_EAP_PROXY

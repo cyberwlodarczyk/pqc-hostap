@@ -467,6 +467,24 @@ int tls_connection_set_params(void *tls_ctx, struct tls_connection *conn,
 		return -1;
 	}
 
+	if (params->tls13_ciphers != NULL)
+	{
+		wpa_printf(MSG_INFO, "GnuTLS: tls13_ciphers not supported");
+		return -1;
+	}
+
+	if (params->tls_groups != NULL)
+	{
+		wpa_printf(MSG_INFO, "GnuTLS: tls_groups not supported");
+		return -1;
+	}
+
+	if (params->tls_sigalgs != NULL)
+	{
+		wpa_printf(MSG_INFO, "GnuTLS: tls_sigalgs not supported");
+		return -1;
+	}
+
 	/* TODO: gnutls_certificate_set_verify_flags(xcred, flags);
 	 * to force peer validation(?) */
 

@@ -2231,6 +2231,9 @@ struct eap_sm * eap_peer_sm_init(void *eapol_ctx,
 	tlsconf.pkcs11_module_path = conf->pkcs11_module_path;
 #endif /* CONFIG_PKCS11_MODULE_PATH */
 	tlsconf.openssl_ciphers = conf->openssl_ciphers;
+	tlsconf.tls13_ciphers = conf->tls13_ciphers;
+	tlsconf.tls_groups = conf->tls_groups;
+	tlsconf.tls_sigalgs = conf->tls_sigalgs;
 #ifdef CONFIG_FIPS
 	tlsconf.fips_mode = 1;
 #endif /* CONFIG_FIPS */

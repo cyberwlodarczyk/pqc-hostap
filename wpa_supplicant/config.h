@@ -657,6 +657,10 @@ struct wpa_config {
 	 */
 	char *openssl_ciphers;
 
+	char *tls13_ciphers;
+	char *tls_groups;
+	char *tls_sigalgs;
+
 	/**
 	 * pcsc_reader - PC/SC reader name prefix
 	 *

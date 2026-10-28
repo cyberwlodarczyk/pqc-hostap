@@ -2614,6 +2614,10 @@ static const struct parse_data ssid_fields[] = {
 	{ STRe(imsi_privacy_cert, imsi_privacy_cert) },
 	{ STRe(imsi_privacy_attr, imsi_privacy_attr) },
 	{ STRe(openssl_ciphers, openssl_ciphers) },
+	{ STRe(tls12_ciphers, openssl_ciphers) },
+	{ STRe(tls13_ciphers, tls13_ciphers) },
+	{ STRe(tls_groups, tls_groups) },
+	{ STRe(tls_sigalgs, tls_sigalgs) },
 	{ INTe(erp, erp) },
 #endif /* IEEE8021X_EAPOL */
 #ifdef CONFIG_WEP
@@ -2907,6 +2911,9 @@ static void eap_peer_config_free(struct eap_peer_config *eap)
 	bin_clear_free(eap->new_password, eap->new_password_len);
 	str_clear_free(eap->external_sim_resp);
 	os_free(eap->openssl_ciphers);
+	os_free(eap->tls13_ciphers);
+	os_free(eap->tls_groups);
+	os_free(eap->tls_sigalgs);
 }
 
 #endif /* IEEE8021X_EAPOL */
@@ -3060,6 +3067,9 @@ void wpa_config_free(struct wpa_config *config)
 	os_free(config->pkcs11_module_path);
 #endif /* CONFIG_PKCS11_MODULE_PATH */
 	os_free(config->openssl_ciphers);
+	os_free(config->tls13_ciphers);
+	os_free(config->tls_groups);
+	os_free(config->tls_sigalgs);
 	os_free(config->pcsc_reader);
 	str_clear_free(config->pcsc_pin);
 	os_free(config->driver_param);
@@ -5384,7 +5394,9 @@ static int wpa_config_process_mld_connect_bssid_pref(
 #define INT_RANGE(f, min, max) #f, wpa_global_config_parse_int_range, \
 	wpa_config_get_int, OFFSET(f), (void *) min, (void *) max
 #define _STR(f) #f, wpa_global_config_parse_str, wpa_config_get_str, OFFSET(f)
+#define _STR_ALIAS(f, a) #f, wpa_global_config_parse_str, wpa_config_get_str, OFFSET(a)
 #define STR(f) _STR(f), NULL, NULL
+#define STR_ALIAS(f, a) _STR_ALIAS(f, a), NULL, NULL
 #define STR_RANGE(f, min, max) _STR(f), (void *) min, (void *) max
 #define BIN(f) #f, wpa_global_config_parse_bin, NULL, OFFSET(f), NULL, NULL
 #define IPV4(f) #f, wpa_global_config_parse_ipv4, wpa_config_get_ipv4,  \
@@ -5422,6 +5434,10 @@ static const struct global_parse_data global_fields[] = {
 	{ STR(pkcs11_module_path), 0 },
 #endif /* CONFIG_PKCS11_MODULE_PATH */
 	{ STR(openssl_ciphers), 0 },
+	{ STR_ALIAS(tls12_ciphers, openssl_ciphers), 0 },
+	{ STR(tls13_ciphers), 0 },
+	{ STR(tls_groups), 0 },
+	{ STR(tls_sigalgs), 0 },
 	{ STR(pcsc_reader), 0 },
 	{ STR(pcsc_pin), 0 },
 	{ INT(external_sim), 0 },

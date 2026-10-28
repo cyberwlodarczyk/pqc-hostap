@@ -1365,7 +1365,9 @@ static void radius_client_write_ready(int sock, void *eloop_ctx, void *sock_ctx)
 	params.client_cert = server->client_cert;
 	params.private_key = server->private_key;
 	params.private_key_passwd = server->private_key_passwd;
-	params.flags = TLS_CONN_DISABLE_TLSv1_0 | TLS_CONN_DISABLE_TLSv1_1;
+	params.flags = TLS_CONN_DISABLE_TLSv1_0 |
+				   TLS_CONN_DISABLE_TLSv1_1 |
+				   radius->conf->tls_flags;
 	if (tls_connection_set_params(radius->tls_ctx, conn, &params)) {
 		wpa_printf(MSG_INFO,
 			   "RADIUS: Failed to set TLS connection parameters");
@@ -1867,6 +1869,11 @@ radius_client_init(void *ctx, struct hostapd_radius_servers *conf)
 
 		os_memset(&tls_conf, 0, sizeof(tls_conf));
 		tls_conf.event_cb = radius_tls_event_cb;
+		tls_conf.openssl_ciphers = conf->openssl_ciphers;
+		tls_conf.tls13_ciphers = conf->tls13_ciphers;
+		tls_conf.tls_groups = conf->tls_groups;
+		tls_conf.tls_sigalgs = conf->tls_sigalgs;
+		tls_conf.tls_flags = conf->tls_flags;
 		radius->tls_ctx = tls_init(&tls_conf);
 		if (!radius->tls_ctx) {
 			radius_client_deinit(radius);

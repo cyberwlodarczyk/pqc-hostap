@@ -228,6 +228,10 @@ struct eapol_ctx {
 	 */
 	const char *openssl_ciphers;
 
+	const char *tls13_ciphers;
+	const char *tls_groups;
+	const char *tls_sigalgs;
+
 	/**
 	 * wps - WPS context data
 	 *

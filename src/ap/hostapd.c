@@ -1323,6 +1323,20 @@ static int hostapd_bss_radius_init(struct hostapd_data *hapd)
 		return 0;
 	}
 
+#ifdef CONFIG_RADIUS_TLS
+	if ((conf->radius->auth_server != NULL &&
+		 conf->radius->auth_server->tls) ||
+		(conf->radius->acct_server != NULL &&
+		 conf->radius->acct_server->tls))
+	{
+		conf->radius->openssl_ciphers = conf->openssl_ciphers;
+		conf->radius->tls13_ciphers = conf->tls13_ciphers;
+		conf->radius->tls_groups = conf->tls_groups;
+		conf->radius->tls_sigalgs = conf->tls_sigalgs;
+		conf->radius->tls_flags = conf->tls_flags;
+	}
+#endif /* CONFIG_RADIUS_TLS */
+
 	hapd->radius = radius_client_init(hapd, conf->radius);
 	if (!hapd->radius) {
 		wpa_printf(MSG_ERROR,

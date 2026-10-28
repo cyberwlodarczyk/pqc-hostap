@@ -2146,6 +2146,9 @@ struct eapol_sm *eapol_sm_init(struct eapol_ctx *ctx)
 	conf.pkcs11_module_path = ctx->pkcs11_module_path;
 #endif /* CONFIG_PKCS11_MODULE_PATH */
 	conf.openssl_ciphers = ctx->openssl_ciphers;
+	conf.tls13_ciphers = ctx->tls13_ciphers;
+	conf.tls_groups = ctx->tls_groups;
+	conf.tls_sigalgs = ctx->tls_sigalgs;
 	conf.wps = ctx->wps;
 	conf.cert_in_cb = ctx->cert_in_cb;
 

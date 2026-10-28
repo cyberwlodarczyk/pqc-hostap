@@ -606,6 +606,9 @@ static int test_eapol(struct eapol_test_data *e, struct wpa_supplicant *wpa_s,
 	ctx->pkcs11_engine_path = wpa_s->conf->pkcs11_engine_path;
 	ctx->pkcs11_module_path = wpa_s->conf->pkcs11_module_path;
 	ctx->openssl_ciphers = wpa_s->conf->openssl_ciphers;
+	ctx->tls13_ciphers = wpa_s->conf->tls13_ciphers;
+	ctx->tls_groups = wpa_s->conf->tls_groups;
+	ctx->tls_sigalgs = wpa_s->conf->tls_sigalgs;
 	ctx->eap_param_needed = eapol_test_eap_param_needed;
 	ctx->cert_cb = eapol_test_cert_cb;
 	ctx->cert_in_cb = 1;

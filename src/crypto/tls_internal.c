@@ -254,6 +254,27 @@ int tls_connection_set_params(void *tls_ctx, struct tls_connection *conn,
 		return -1;
 	}
 
+	if (params->tls13_ciphers != NULL)
+	{
+		wpa_printf(MSG_INFO, "TLS: tls13_ciphers not supported");
+		tlsv1_cred_free(cred);
+		return -1;
+	}
+
+	if (params->tls_groups != NULL)
+	{
+		wpa_printf(MSG_INFO, "TLS: tls_groups not supported");
+		tlsv1_cred_free(cred);
+		return -1;
+	}
+
+	if (params->tls_sigalgs != NULL)
+	{
+		wpa_printf(MSG_INFO, "TLS: tls_sigalgs not supported");
+		tlsv1_cred_free(cred);
+		return -1;
+	}
+
 	if (tlsv1_set_ca_cert(cred, params->ca_cert,
 			      params->ca_cert_blob, params->ca_cert_blob_len,
 			      params->ca_path)) {

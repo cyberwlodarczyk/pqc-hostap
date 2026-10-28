@@ -204,6 +204,14 @@ struct hostapd_radius_servers {
 	 * force_client_dev - Bind the socket to a specified interface, if set
 	 */
 	char *force_client_dev;
+
+#ifdef CONFIG_RADIUS_TLS
+	const char *openssl_ciphers;
+	const char *tls13_ciphers;
+	const char *tls_groups;
+	const char *tls_sigalgs;
+	unsigned int tls_flags;
+#endif /* CONFIG_RADIUS_TLS */
 };
 
 

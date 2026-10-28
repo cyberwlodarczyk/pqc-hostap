@@ -2154,7 +2154,7 @@ static int parse_fils_realm(struct hostapd_bss_config *bss, const char *val)
 #endif /* CONFIG_FILS */
 
 
-#ifdef EAP_SERVER
+#if defined(EAP_SERVER) || defined(CONFIG_RADIUS_TLS)
 static unsigned int parse_tls_flags(const char *val)
 {
 	unsigned int flags = 0;
@@ -2191,7 +2191,7 @@ static unsigned int parse_tls_flags(const char *val)
 
 	return flags;
 }
-#endif /* EAP_SERVER */
+#endif /* defined(EAP_SERVER) || defined(CONFIG_RADIUS_TLS) */
 
 
 #ifdef CONFIG_AIRTIME_POLICY
@@ -2606,6 +2606,30 @@ static int hostapd_config_fill(struct hostapd_config *conf,
 		}
 		bss->eapol_version = eapol_version;
 		wpa_printf(MSG_DEBUG, "eapol_version=%d", bss->eapol_version);
+#if defined(EAP_SERVER) || defined(CONFIG_RADIUS_TLS)
+	} else if (os_strcmp(buf, "openssl_ciphers") == 0) {
+		os_free(bss->openssl_ciphers);
+		bss->openssl_ciphers = os_strdup(pos);
+	} else if (os_strcmp(buf, "openssl_ecdh_curves") == 0) {
+		os_free(bss->openssl_ecdh_curves);
+		bss->openssl_ecdh_curves = os_strdup(pos);
+	} else if (os_strcmp(buf, "tls12_ciphers") == 0) {
+		os_free(bss->openssl_ciphers);
+		bss->openssl_ciphers = os_strdup(pos);
+	} else if (os_strcmp(buf, "tls13_ciphers") == 0) {
+		os_free(bss->tls13_ciphers);
+		bss->tls13_ciphers = os_strdup(pos);
+	} else if (os_strcmp(buf, "tls_groups") == 0) {
+		os_free(bss->tls_groups);
+		bss->tls_groups = os_strdup(pos);
+	} else if (os_strcmp(buf, "tls_sigalgs") == 0) {
+		os_free(bss->tls_sigalgs);
+		bss->tls_sigalgs = os_strdup(pos);
+	} else if (os_strcmp(buf, "tls_session_lifetime") == 0) {
+		bss->tls_session_lifetime = atoi(pos);
+	} else if (os_strcmp(buf, "tls_flags") == 0) {
+		bss->tls_flags = parse_tls_flags(pos);
+#endif /* defined(EAP_SERVER) || defined(CONFIG_RADIUS_TLS) */
 #ifdef EAP_SERVER
 	} else if (os_strcmp(buf, "eap_authenticator") == 0) {
 		bss->eap_server = atoi(pos);
@@ -2652,10 +2676,6 @@ static int hostapd_config_fill(struct hostapd_config *conf,
 		bss->check_crl_strict = atoi(pos);
 	} else if (os_strcmp(buf, "crl_reload_interval") == 0) {
 		bss->crl_reload_interval = atoi(pos);
-	} else if (os_strcmp(buf, "tls_session_lifetime") == 0) {
-		bss->tls_session_lifetime = atoi(pos);
-	} else if (os_strcmp(buf, "tls_flags") == 0) {
-		bss->tls_flags = parse_tls_flags(pos);
 	} else if (os_strcmp(buf, "max_auth_rounds") == 0) {
 		bss->max_auth_rounds = atoi(pos);
 	} else if (os_strcmp(buf, "max_auth_rounds_short") == 0) {
@@ -2669,12 +2689,6 @@ static int hostapd_config_fill(struct hostapd_config *conf,
 	} else if (os_strcmp(buf, "dh_file") == 0) {
 		os_free(bss->dh_file);
 		bss->dh_file = os_strdup(pos);
-	} else if (os_strcmp(buf, "openssl_ciphers") == 0) {
-		os_free(bss->openssl_ciphers);
-		bss->openssl_ciphers = os_strdup(pos);
-	} else if (os_strcmp(buf, "openssl_ecdh_curves") == 0) {
-		os_free(bss->openssl_ecdh_curves);
-		bss->openssl_ecdh_curves = os_strdup(pos);
 	} else if (os_strcmp(buf, "fragment_size") == 0) {
 		bss->fragment_size = atoi(pos);
 #ifdef EAP_SERVER_FAST

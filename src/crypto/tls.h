@@ -92,6 +92,9 @@ struct tls_config {
 	int fips_mode;
 	int cert_in_cb;
 	const char *openssl_ciphers;
+	const char *tls13_ciphers;
+	const char *tls_groups;
+	const char *tls_sigalgs;
 	unsigned int tls_session_lifetime;
 	unsigned int crl_reload_interval;
 	unsigned int tls_flags;
@@ -214,6 +217,9 @@ struct tls_connection_params {
 	const char *ca_cert_id;
 	const char *openssl_ciphers;
 	const char *openssl_ecdh_curves;
+	const char *tls13_ciphers;
+	const char *tls_groups;
+	const char *tls_sigalgs;
 
 	unsigned int flags;
 	const char *ocsp_stapling_response;

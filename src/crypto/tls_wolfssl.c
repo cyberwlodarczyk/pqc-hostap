@@ -293,6 +293,34 @@ void * tls_init(const struct tls_config *conf)
 		return NULL;
 	}
 
+	if (conf != NULL &&
+		conf->tls_groups != NULL &&
+		wolfSSL_CTX_set1_groups_list(
+			ssl_ctx,
+			conf->tls_groups) != WOLFSSL_SUCCESS)
+	{
+		wpa_printf(
+			MSG_ERROR,
+			"wolfSSL: Failed to set groups string '%s'",
+			ciphers);
+		tls_deinit(ssl_ctx);
+		return NULL;
+	}
+
+	if (conf != NULL &&
+		conf->tls_sigalgs != NULL &&
+		wolfSSL_CTX_set1_sigalgs_list(
+			ssl_ctx,
+			conf->tls_sigalgs) != WOLFSSL_SUCCESS)
+	{
+		wpa_printf(
+			MSG_ERROR,
+			"wolfSSL: Failed to set sigalgs string '%s'",
+			ciphers);
+		tls_deinit(ssl_ctx);
+		return NULL;
+	}
+
 	return ssl_ctx;
 }
 
@@ -1334,6 +1362,30 @@ int tls_connection_set_params(void *tls_ctx, struct tls_connection *conn,
 		return -1;
 	}
 
+	if (params->tls_groups != NULL &&
+		wolfSSL_set1_groups_list(
+			conn->ssl,
+			params->tls_groups) != WOLFSSL_SUCCESS)
+	{
+		wpa_printf(
+			MSG_INFO,
+			"wolfSSL: Failed to set groups string '%s'",
+			params->tls_groups);
+		return -1;
+	}
+
+	if (params->tls_sigalgs != NULL &&
+		wolfSSL_set1_sigalgs_list(
+			conn->ssl,
+			params->tls_sigalgs) != WOLFSSL_SUCCESS)
+	{
+		wpa_printf(
+			MSG_INFO,
+			"wolfSSL: Failed to set sigalgs string '%s'",
+			params->tls_sigalgs);
+		return -1;
+	}
+
 	tls_set_conn_flags(conn->ssl, params->flags);
 
 #ifdef HAVE_CERTIFICATE_STATUS_REQUEST
@@ -1570,6 +1622,36 @@ int tls_global_set_params(void *tls_ctx,
 	if (params->openssl_ecdh_curves) {
 		wpa_printf(MSG_INFO,
 			   "wolfSSL: openssl_ecdh_curves not supported");
+		return -1;
+	}
+
+	if (params->tls13_ciphers != NULL)
+	{
+		wpa_printf(MSG_INFO, "wolfSSL: tls13_ciphers not supported");
+		return -1;
+	}
+
+	if (params->tls_groups != NULL
+		&& wolfSSL_CTX_set1_groups_list(
+			tls_ctx,
+			params->tls_groups) != WOLFSSL_SUCCESS)
+	{
+		wpa_printf(
+			MSG_INFO,
+			"wolfSSL: Failed to set groups string '%s'",
+			params->tls_groups);
+		return -1;
+	}
+
+	if (params->tls_sigalgs != NULL
+		&& wolfSSL_CTX_set1_sigalgs_list(
+			tls_ctx,
+			params->tls_sigalgs) != WOLFSSL_SUCCESS)
+	{
+		wpa_printf(
+			MSG_INFO,
+			"wolfSSL: Failed to set sigalgs string '%s'",
+			params->tls_sigalgs);
 		return -1;
 	}
 

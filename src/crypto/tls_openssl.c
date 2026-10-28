@@ -234,6 +234,9 @@ struct tls_data {
 	struct os_reltime crl_last_reload;
 	char *check_cert_subject;
 	char *openssl_ciphers;
+	char *tls13_ciphers;
+	char *tls_groups;
+	char *tls_sigalgs;
 };
 
 struct tls_connection {
@@ -1171,17 +1174,50 @@ void * tls_init(const struct tls_config *conf)
 		ciphers = conf->openssl_ciphers;
 	else
 		ciphers = TLS_DEFAULT_CIPHERS;
-	if (SSL_CTX_set_cipher_list(ssl, ciphers) != 1
-#if OPENSSL_VERSION_NUMBER >= 0x10101000L
-		|| SSL_CTX_set_ciphersuites(ssl, ciphers) != 1
-#endif /* >= 1.1.1 */
-	) {
+	if (SSL_CTX_set_cipher_list(ssl, ciphers) != 1) {
 		wpa_printf(MSG_ERROR,
 			   "OpenSSL: Failed to set cipher string '%s'",
 			   ciphers);
 		tls_deinit(data);
 		return NULL;
 	}
+
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+	if (conf->tls13_ciphers != NULL &&
+		SSL_CTX_set_ciphersuites(ssl, conf->tls13_ciphers) != 1)
+	{
+		wpa_printf(
+			MSG_ERROR,
+			"OpenSSL: Failed to set cipher string '%s'",
+			conf->tls13_ciphers);
+		tls_deinit(data);
+		return NULL;
+	}
+
+	if (conf != NULL &&
+		conf->tls_groups != NULL &&
+		SSL_CTX_set1_groups_list(ssl, conf->tls_groups) != 1)
+	{
+		wpa_printf(
+			MSG_ERROR,
+			"OpenSSL: Failed to set groups string '%s'",
+			conf->tls_groups);
+		tls_deinit(data);
+		return NULL;
+	}
+
+	if (conf != NULL &&
+		conf->tls_sigalgs != NULL &&
+		SSL_CTX_set1_sigalgs_list(ssl, conf->tls_sigalgs) != 1)
+	{
+		wpa_printf(
+			MSG_ERROR,
+			"OpenSSL: Failed to set sigalgs string '%s'",
+			conf->tls_sigalgs);
+		tls_deinit(data);
+		return NULL;
+	}
+#endif /* >= 1.1.1 */
 
 	return data;
 }
@@ -1236,6 +1272,9 @@ void tls_deinit(void *ssl_ctx)
 
 	os_free(data->check_cert_subject);
 	os_free(data->openssl_ciphers);
+	os_free(data->tls13_ciphers);
+	os_free(data->tls_groups);
+	os_free(data->tls_sigalgs);
 	os_free(data);
 }
 
@@ -3220,11 +3259,7 @@ static int tls_set_conn_flags(struct tls_connection *conn, unsigned int flags,
 				   openssl_ciphers);
 			ciphers = openssl_ciphers;
 		}
-		if (SSL_set_cipher_list(ssl, ciphers) != 1
-#if OPENSSL_VERSION_NUMBER >= 0x10101000L
-			|| SSL_set_ciphersuites(ssl, ciphers) != 1
-#endif /* >= 1.1.1 */
-		) {
+		if (SSL_set_cipher_list(ssl, ciphers) != 1) {
 			wpa_printf(MSG_INFO,
 				   "OpenSSL: Failed to set Suite B ciphers");
 			return -1;
@@ -3243,11 +3278,7 @@ static int tls_set_conn_flags(struct tls_connection *conn, unsigned int flags,
 				   openssl_ciphers);
 			ciphers = openssl_ciphers;
 		}
-		if (SSL_set_cipher_list(ssl, ciphers) != 1
-#if OPENSSL_VERSION_NUMBER >= 0x10101000L
-			|| SSL_set_ciphersuites(ssl, ciphers) != 1
-#endif /* >= 1.1.1 */
-		) {
+		if (SSL_set_cipher_list(ssl, ciphers) != 1) {
 			wpa_printf(MSG_INFO,
 				   "OpenSSL: Failed to set Suite B ciphers");
 			return -1;
@@ -3335,11 +3366,7 @@ static int tls_set_conn_flags(struct tls_connection *conn, unsigned int flags,
 	}
 #else /* OPENSSL_IS_BORINGSSL */
 	if (!(flags & (TLS_CONN_SUITEB | TLS_CONN_SUITEB_NO_ECDH)) &&
-		openssl_ciphers && (SSL_set_cipher_list(ssl, openssl_ciphers) != 1
-#if OPENSSL_VERSION_NUMBER >= 0x10101000L
-		|| SSL_set_ciphersuites(ssl, openssl_ciphers) != 1
-#endif /* >= 1.1.1 */
-	)) {
+	    openssl_ciphers && SSL_set_cipher_list(ssl, openssl_ciphers) != 1) {
 		wpa_printf(MSG_INFO,
 			   "OpenSSL: Failed to set openssl_ciphers '%s'",
 			   openssl_ciphers);
@@ -3347,11 +3374,7 @@ static int tls_set_conn_flags(struct tls_connection *conn, unsigned int flags,
 	}
 #endif /* OPENSSL_IS_BORINGSSL */
 #else /* CONFIG_SUITEB */
-	if (openssl_ciphers && (SSL_set_cipher_list(ssl, openssl_ciphers) != 1
-#if OPENSSL_VERSION_NUMBER >= 0x10101000L
-		|| SSL_set_ciphersuites(ssl, openssl_ciphers) != 1
-#endif /* >= 1.1.1 */
-	)) {
+	if (openssl_ciphers && SSL_set_cipher_list(ssl, openssl_ciphers) != 1) {
 		wpa_printf(MSG_INFO,
 			   "OpenSSL: Failed to set openssl_ciphers '%s'",
 			   openssl_ciphers);
@@ -3386,11 +3409,7 @@ static int tls_set_conn_flags(struct tls_connection *conn, unsigned int flags,
 		wpa_printf(MSG_DEBUG,
 			   "OpenSSL: Enable cipher suites for anonymous EAP-TEAP provisioning: %s",
 			   cs);
-		if (SSL_set_cipher_list(conn->ssl, cs) != 1
-#if OPENSSL_VERSION_NUMBER >= 0x10101000L
-			|| SSL_set_ciphersuites(conn->ssl, cs) != 1
-#endif /* >= 1.1.1 */
-		) {
+		if (SSL_set_cipher_list(conn->ssl, cs) != 1) {
 			tls_show_errors(MSG_INFO, __func__,
 					"Cipher suite configuration failed");
 			return -1;
@@ -4936,11 +4955,7 @@ int tls_connection_set_cipher_list(void *tls_ctx, struct tls_connection *conn,
 #endif /* EAP_FAST_OR_TEAP */
 #endif
 
-	if (SSL_set_cipher_list(conn->ssl, buf + 1) != 1
-#if OPENSSL_VERSION_NUMBER >= 0x10101000L
-		|| SSL_set_ciphersuites(conn->ssl, buf + 1) != 1
-#endif /* >= 1.1.1 */
-	) {
+	if (SSL_set_cipher_list(conn->ssl, buf + 1) != 1) {
 		tls_show_errors(MSG_INFO, __func__,
 				"Cipher suite configuration failed");
 		return -1;
@@ -5510,16 +5525,24 @@ int tls_connection_set_params(void *tls_ctx, struct tls_connection *conn,
 	}
 #endif /* OPENSSL_IS_BORINGSSL */
 #endif /* CONFIG_SUITEB */
-	if (ciphers && (SSL_set_cipher_list(conn->ssl, ciphers) != 1
-#if OPENSSL_VERSION_NUMBER >= 0x10101000L
-		|| SSL_set_ciphersuites(conn->ssl, ciphers) != 1
-#endif /* >= 1.1.1 */
-	)) {
+	if (ciphers && SSL_set_cipher_list(conn->ssl, ciphers) != 1) {
 		wpa_printf(MSG_INFO,
 			   "OpenSSL: Failed to set cipher string '%s'",
 			   ciphers);
 		return -1;
 	}
+
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+	if (params->tls13_ciphers != NULL &&
+		SSL_set_ciphersuites(conn->ssl, params->tls13_ciphers) != 1)
+	{
+		wpa_printf(
+			MSG_INFO,
+			"OpenSSL: Failed to set cipher string '%s'",
+			ciphers);
+		return -1;
+	}
+#endif /* >= 1.1.1 */
 
 	if (!params->openssl_ecdh_curves) {
 #ifndef OPENSSL_IS_BORINGSSL
@@ -5553,6 +5576,28 @@ int tls_connection_set_params(void *tls_ctx, struct tls_connection *conn,
 #endif /* OPENSSL_NO_EC */
 #endif /* OPENSSL_IS_BORINGSSL */
 	}
+
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+	if (params->tls_groups != NULL
+		&& SSL_set1_groups_list(conn->ssl, params->tls_groups) != 1)
+	{
+		wpa_printf(
+			MSG_INFO,
+			"OpenSSL: Failed to set groups string '%s'",
+			params->tls_groups);
+		return -1;
+	}
+
+	if (params->tls_sigalgs != NULL
+		&& SSL_set1_sigalgs_list(conn->ssl, params->tls_sigalgs) != 1)
+	{
+		wpa_printf(
+			MSG_INFO,
+			"OpenSSL: Failed to set sigalgs string '%s'",
+			params->tls_sigalgs);
+		return -1;
+	}
+#endif /* >= 1.1.1 */
 
 #ifdef OPENSSL_IS_BORINGSSL
 	if (params->flags & TLS_CONN_REQUEST_OCSP) {
@@ -5741,16 +5786,37 @@ int tls_global_set_params(void *tls_ctx,
 		data->openssl_ciphers = NULL;
 	}
 	if (params->openssl_ciphers &&
-		(SSL_CTX_set_cipher_list(ssl_ctx, params->openssl_ciphers) != 1
-#if OPENSSL_VERSION_NUMBER >= 0x10101000L
-		|| SSL_CTX_set_ciphersuites(ssl_ctx, params->openssl_ciphers) != 1
-#endif /* >= 1.1.1 */
-	)) {
+	    SSL_CTX_set_cipher_list(ssl_ctx, params->openssl_ciphers) != 1) {
 		wpa_printf(MSG_INFO,
 			   "OpenSSL: Failed to set cipher string '%s'",
 			   params->openssl_ciphers);
 		return -1;
 	}
+
+	os_free(data->tls13_ciphers);
+	if (params->tls13_ciphers != NULL)
+	{
+		data->tls13_ciphers = os_strdup(params->tls13_ciphers);
+		if (data->tls13_ciphers == NULL)
+		{
+			return -1;
+		}
+	}
+	else
+	{
+		data->tls13_ciphers = NULL;
+	}
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+	if (params->tls13_ciphers != NULL &&
+		SSL_CTX_set_ciphersuites(ssl_ctx, params->tls13_ciphers) != 1)
+	{
+		wpa_printf(
+			MSG_INFO,
+			"OpenSSL: Failed to set cipher string '%s'",
+			params->tls13_ciphers);
+		return -1;
+	}
+#endif /* >= 1.1.1 */
 
 	if (!params->openssl_ecdh_curves) {
 #ifndef OPENSSL_IS_BORINGSSL
@@ -5788,6 +5854,56 @@ int tls_global_set_params(void *tls_ctx,
 #endif /* OPENSSL_NO_EC */
 #endif /* OPENSSL_IS_BORINGSSL */
 	}
+
+	os_free(data->tls_groups);
+	if (params->tls_groups != NULL)
+	{
+		data->tls_groups = os_strdup(params->tls_groups);
+		if (data->tls_groups == NULL)
+		{
+			return -1;
+		}
+	}
+	else
+	{
+		data->tls_groups = NULL;
+	}
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+	if (params->tls_groups != NULL
+		&& SSL_CTX_set1_groups_list(ssl_ctx, params->tls_groups) != 1)
+	{
+		wpa_printf(
+			MSG_INFO,
+			"OpenSSL: Failed to set groups string '%s'",
+			params->tls_groups);
+		return -1;
+	}
+#endif /* >= 1.1.1 */
+
+	os_free(data->tls_sigalgs);
+	if (params->tls_sigalgs != NULL)
+	{
+		data->tls_sigalgs = os_strdup(params->tls_sigalgs);
+		if (data->tls_sigalgs == NULL)
+		{
+			return -1;
+		}
+	}
+	else
+	{
+		data->tls_sigalgs = NULL;
+	}
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+	if (params->tls_sigalgs != NULL
+		&& SSL_CTX_set1_sigalgs_list(ssl_ctx, params->tls_sigalgs) != 1)
+	{
+		wpa_printf(
+			MSG_INFO,
+			"OpenSSL: Failed to set sigalgs string '%s'",
+			params->tls_sigalgs);
+		return -1;
+	}
+#endif /* >= 1.1.1 */
 
 #ifdef SSL_OP_NO_TICKET
 	if (params->flags & TLS_CONN_DISABLE_SESSION_TICKET)

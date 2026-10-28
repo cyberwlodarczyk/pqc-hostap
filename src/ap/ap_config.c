@@ -855,6 +855,9 @@ void hostapd_config_free_bss(struct hostapd_bss_config *conf)
 	os_free(conf->dh_file);
 	os_free(conf->openssl_ciphers);
 	os_free(conf->openssl_ecdh_curves);
+	os_free(conf->tls13_ciphers);
+	os_free(conf->tls_groups);
+	os_free(conf->tls_sigalgs);
 	os_free(conf->pac_opaque_encr_key);
 	os_free(conf->eap_fast_a_id);
 	os_free(conf->eap_fast_a_id_info);

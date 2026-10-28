@@ -694,6 +694,10 @@ struct eap_peer_config {
 	 */
 	char *openssl_ciphers;
 
+	char *tls13_ciphers;
+	char *tls_groups;
+	char *tls_sigalgs;
+
 	/**
 	 * erp - Whether EAP Re-authentication Protocol (ERP) is enabled
 	 */

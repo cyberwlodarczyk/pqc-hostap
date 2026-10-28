@@ -752,6 +752,9 @@ static void wpa_config_write_network(FILE *f, struct wpa_ssid *ssid)
 	INTe(machine_engine, machine_cert.engine);
 	INT_DEF(eapol_flags, DEFAULT_EAPOL_FLAGS);
 	STR(openssl_ciphers);
+	STR(tls13_ciphers);
+	STR(tls_groups);
+	STR(tls_sigalgs);
 	INTe(erp, erp);
 #endif /* IEEE8021X_EAPOL */
 #ifdef CONFIG_WEP
@@ -1144,6 +1147,12 @@ static void wpa_config_write_global(FILE *f, struct wpa_config *config)
 #endif /* CONFIG_PKCS11_MODULE_PATH */
 	if (config->openssl_ciphers)
 		fprintf(f, "openssl_ciphers=%s\n", config->openssl_ciphers);
+	if (config->tls13_ciphers != NULL)
+		fprintf(f, "tls13_ciphers=%s\n", config->tls13_ciphers);
+	if (config->tls_groups != NULL)
+		fprintf(f, "tls_groups=%s\n", config->tls_groups);
+	if (config->tls_sigalgs != NULL)
+		fprintf(f, "tls_sigalgs=%s\n", config->tls_sigalgs);
 	if (config->pcsc_reader)
 		fprintf(f, "pcsc_reader=%s\n", config->pcsc_reader);
 	if (config->pcsc_pin)
